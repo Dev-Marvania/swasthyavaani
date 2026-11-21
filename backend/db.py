@@ -82,7 +82,8 @@ class DatabaseManager:
 
     async def save_record(self, record: ASHAVisitRecord) -> str:
         """Save a confirmed visit record (encrypted). Returns the record_id."""
-        assert self._db is not None, "Database not initialized. Call init_db() first."
+        if self._db is None:
+            await self.init_db()
         record_id = record.record_id or f"REC-{uuid.uuid4().hex[:8].upper()}"
         record.record_id = record_id
         encrypted_data = self.crypto.encrypt_json(record.model_dump(mode="json"))
@@ -95,7 +96,8 @@ class DatabaseManager:
 
     async def get_records(self) -> list[ASHAVisitRecord]:
         """Retrieve and decrypt all visit records."""
-        assert self._db is not None, "Database not initialized. Call init_db() first."
+        if self._db is None:
+            await self.init_db()
         cursor = await self._db.execute("SELECT data FROM visit_records ORDER BY created_at DESC")
         rows = await cursor.fetchall()
         records: list[ASHAVisitRecord] = []
@@ -108,7 +110,8 @@ class DatabaseManager:
 
     async def save_transcript(self, session_id: str, transcript: str) -> str:
         """Save a session transcript (encrypted)."""
-        assert self._db is not None
+        if self._db is None:
+            await self.init_db()
         transcript_id = f"TXN-{uuid.uuid4().hex[:8].upper()}"
         encrypted_data = self.crypto.encrypt(transcript)
         await self._db.execute(
@@ -129,7 +132,8 @@ class DatabaseManager:
 
     async def seed_beneficiaries(self, beneficiaries: list[dict[str, Any]]) -> int:
         """Seed synthetic beneficiary data. Returns count inserted."""
-        assert self._db is not None
+        if self._db is None:
+            await self.init_db()
         count = 0
         for b in beneficiaries:
             await self._db.execute(
@@ -144,7 +148,8 @@ class DatabaseManager:
 
     async def purge_all(self) -> dict[str, int]:
         """Delete ALL records and transcripts. For post-judging DPDP compliance."""
-        assert self._db is not None
+        if self._db is None:
+            await self.init_db()
         rec_cursor = await self._db.execute("SELECT COUNT(*) FROM visit_records")
         rec_count = (await rec_cursor.fetchone())[0]
         txn_cursor = await self._db.execute("SELECT COUNT(*) FROM transcripts")
