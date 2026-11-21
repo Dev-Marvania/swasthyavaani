@@ -155,6 +155,53 @@ class TestVisitExtractor:
         assert "vaccinations" in missing
         assert "next_visit_date" in missing
 
+    def test_detect_missing_fields_with_na_fields(self, extractor: VisitExtractor):
+        """Fields marked N/A or ['None'] should not be flagged as missing."""
+        record_with_none_vax = ASHAVisitRecord(
+            beneficiary_id="SYN-ASHA-001",
+            visit_type=VisitType.ANC,
+            weight_kg=54.5,
+            vaccinations_given=["None"],
+            next_visit_date=None,
+            danger_flag=False,
+            confirmed=False,
+            language=Language.HI,
+        )
+
+        missing = extractor.detect_missing_fields(
+            record_with_none_vax,
+            na_fields={"next_visit_date"}
+        )
+        assert "weight_kg" not in missing
+        assert "vaccinations" not in missing
+        assert "next_visit_date" not in missing
+        assert len(missing) == 0
+
+    @pytest.mark.asyncio
+    async def test_extract_not_applicable_declarations(self, extractor: VisitExtractor):
+        """Spoken 'koi vaccine nahi, agla appointment nahi' should resolve to N/A."""
+        base_resp = dict(MOCK_EXTRACTION_RESPONSE)
+        base_resp["vaccinations_given"] = []
+        base_resp["next_visit_date"] = None
+
+        with patch(
+            "agent.llm_client.llm_client.extract_visit_record",
+            new_callable=AsyncMock,
+            return_value=base_resp,
+        ), patch(
+            "agent.llm_client.llm_client.check_danger_signs",
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            ext_res = await extractor.extract(
+                transcript="Priya Devi ka ANC visit hai, vajan 55 kg hai. Koi vaccine nahi di, agla appointment nahi hai.",
+                language="hi-IN",
+            )
+            assert "vaccinations" in ext_res.na_fields
+            assert "next_visit_date" in ext_res.na_fields
+            assert "vaccinations" not in ext_res.missing_fields
+            assert "next_visit_date" not in ext_res.missing_fields
+
     @pytest.mark.asyncio
     async def test_auto_language_in_extraction(self, extractor: VisitExtractor):
         """Auto language parameter should be resolved automatically by language detector."""

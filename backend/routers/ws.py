@@ -71,6 +71,8 @@ async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
     lang_config = _load_language_config()
     current_record: Optional[ASHAVisitRecord] = None
     current_missing_fields: list[str] = []
+    session_na_fields: set[str] = set()
+    session_asked_fields: set[str] = set()
     lock = asyncio.Lock()
 
     # ── Initialize Voice Pipeline ──────────────────────────────────────────
@@ -150,7 +152,7 @@ async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
 
     async def process_text_turn(text: str, active_lang: str):
         """Runs danger detection, LLM extraction/correction, readback, and audio streaming."""
-        nonlocal current_record, current_missing_fields, language
+        nonlocal current_record, current_missing_fields, language, session_na_fields, session_asked_fields
         async with lock:
             # 1. Save transcript encrypted for DPDP
             try:
@@ -158,9 +160,65 @@ async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
             except Exception as e:
                 logger.warning("Failed to save transcript: %s", e)
 
-            # Check if this is a confirmation intent
             lower = text.lower().strip()
-            if current_record and any(kw in lower for kw in ("confirm", "theek hai", "sahi hai", "save karo", "haan")):
+
+            # 2. Check for explicit spoken "Not Applicable" / "None" declarations
+            if any(w in lower for w in ("koi vaccine nahi", "vaccine nahi", "no vaccine", "tika nahi", "koi injection nahi", "vaccine na", "vaccine n/a", "vaccine not applicable")):
+                session_na_fields.add("vaccinations")
+                if current_record:
+                    current_record.vaccinations_given = ["None"]
+
+            if any(w in lower for w in ("appointment nahi", "no appointment", "agla appointment nahi", "next visit nahi", "appointment na", "appointment n/a", "tareekh nahi", "appointment not applicable")):
+                session_na_fields.add("next_visit_date")
+                if current_record:
+                    current_record.next_visit_date = None
+                    tasks = list(current_record.follow_up_tasks or [])
+                    if "Next visit: Not Applicable" not in tasks:
+                        tasks.append("Next visit: Not Applicable")
+                    current_record.follow_up_tasks = tasks
+
+            if any(w in lower for w in ("vajan nahi", "weight nahi", "no weight", "scale nahi", "weight na", "weight n/a", "weight not applicable", "vajan nahi liya")):
+                session_na_fields.add("weight_kg")
+                if current_record:
+                    current_record.weight_kg = None
+
+            # 3. Check for save / confirmation intent
+            is_save_request = current_record and any(
+                kw in lower for kw in (
+                    "confirm", "theek hai, save", "theek hai save", "save karo", "save karde",
+                    "save kar do", "save kar dijiye", "record save", "haan save", "haan theek hai, save"
+                )
+            )
+            if not is_save_request and current_record and any(kw == lower or f" {kw}" in lower for kw in ("theek hai", "sahi hai", "haan theek hai")):
+                # Conversational agreement treated as save request if user already heard readback
+                is_save_request = True
+
+            if is_save_request and current_record:
+                # ── Guarded Confirmation Gate: Refuse save if essential fields missing & not N/A ──
+                missing = visit_extractor.detect_missing_fields(current_record, na_fields=session_na_fields)
+                if missing:
+                    logger.info("Save blocked: mandatory fields missing %s", missing)
+                    await websocket.send_text(
+                        _ws_event(
+                            "save_blocked",
+                            {
+                                "record": current_record.model_dump(mode="json"),
+                                "missing_fields": missing,
+                            },
+                        )
+                    )
+                    notice_speech = await readback_generator.generate_save_blocked_notice(language, missing)
+                    await websocket.send_text(_ws_event("agent_speaking", {"speaking": True, "text": notice_speech}))
+                    try:
+                        async for chunk in pipeline.stream_speech(notice_speech):
+                            await websocket.send_bytes(chunk)
+                    except Exception as e:
+                        logger.debug("Save-blocked speech error: %s", e)
+                    finally:
+                        await websocket.send_text(_ws_event("agent_speaking", {"speaking": False, "text": ""}))
+                    return
+
+                # All required fields present or marked N/A: Proceed with save
                 current_record.confirmed = True
                 try:
                     saved_id = await db.save_record(current_record)
@@ -170,6 +228,23 @@ async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
                             {"record": current_record.model_dump(mode="json"), "saved_id": saved_id},
                         )
                     )
+                    confirm_speech = "Record safaltapoorvak save ho gaya hai."
+                    if language.startswith("kn"):
+                        confirm_speech = "ದಾಖಲೆಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಉಳಿಸಲಾಗಿದೆ."
+                    elif language.startswith("ta"):
+                        confirm_speech = "பதிவு வெற்றிகரமாக சேமிக்கப்பட்டது."
+                    elif language.startswith("te"):
+                        confirm_speech = "రికార్డు విజయవంతంగా సేవ్ చేయబడింది."
+                    elif language.startswith("mr"):
+                        confirm_speech = "नोंद यशस्वीरित्या सेव्ह केली गेली आहे."
+                    await websocket.send_text(_ws_event("agent_speaking", {"speaking": True, "text": confirm_speech}))
+                    try:
+                        async for chunk in pipeline.stream_speech(confirm_speech):
+                            await websocket.send_bytes(chunk)
+                    except Exception as e:
+                        logger.debug("Confirm speech stream error: %s", e)
+                    finally:
+                        await websocket.send_text(_ws_event("agent_speaking", {"speaking": False, "text": ""}))
                 except Exception as e:
                     logger.error("Failed to save confirmed record: %s", e)
                     await websocket.send_text(
@@ -177,21 +252,27 @@ async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
                     )
                 return
 
-            # Check if this is a correction intent for an existing record
+            # 4. Check if this is a correction intent for an existing record
             is_correction = current_record is not None and any(
                 kw in lower for kw in ("nahi", "galat", "no", "change", "badal", "update", "correction")
             )
+
+            danger_signs = []
+            danger_source = "deterministic"
 
             if is_correction and current_record:
                 updated = await visit_extractor.apply_correction(current_record, text)
                 if updated:
                     current_record = updated
-                    current_missing_fields = visit_extractor.detect_missing_fields(current_record)
+                    current_missing_fields = visit_extractor.detect_missing_fields(current_record, na_fields=session_na_fields)
             else:
                 ext_res = await visit_extractor.extract(text, active_lang)
                 record, danger_signs, danger_source = ext_res
+                if hasattr(ext_res, "na_fields") and ext_res.na_fields:
+                    session_na_fields.update(ext_res.na_fields)
+
                 current_missing_fields = getattr(ext_res, "missing_fields", None) or (
-                    visit_extractor.detect_missing_fields(record) if record else []
+                    visit_extractor.detect_missing_fields(record, na_fields=session_na_fields) if record else []
                 )
                 detected_lang = getattr(ext_res, "detected_language", None) or active_lang
 
@@ -221,33 +302,50 @@ async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
                         if current_record.vaccinations_given and not record.vaccinations_given:
                             record.vaccinations_given = current_record.vaccinations_given
                     current_record = record
-                    current_missing_fields = visit_extractor.detect_missing_fields(current_record)
-
-                    # If danger signs detected, emit danger_alert immediately
-                    if current_record.danger_flag and danger_signs:
-                        referral_msg = current_record.referral_action or danger_detector.get_referral_message(language)
-                        await websocket.send_text(
-                            _ws_event(
-                                "danger_alert",
-                                {
-                                    "signs": [s["id"] for s in danger_signs],
-                                    "labels": [s["label"] for s in danger_signs],
-                                    "message": referral_msg,
-                                    "source": danger_source,
-                                },
-                            )
-                        )
-                        # Spoken PHC referral instruction
-                        await websocket.send_text(_ws_event("agent_speaking", {"speaking": True, "text": referral_msg}))
-                        try:
-                            async for chunk in pipeline.stream_speech(referral_msg):
-                                await websocket.send_bytes(chunk)
-                        except Exception as e:
-                            logger.debug("Referral speech stream error: %s", e)
-                        finally:
-                            await websocket.send_text(_ws_event("agent_speaking", {"speaking": False, "text": ""}))
+                    current_missing_fields = visit_extractor.detect_missing_fields(current_record, na_fields=session_na_fields)
 
             if current_record:
+                # ── CRITICAL CLINICAL DANGER INVARIANT ──
+                # If danger signs detected, prompt ONLY immediate referral!
+                # All missing administrative field nagging is STRICTLY muted!
+                if current_record.danger_flag or danger_signs:
+                    referral_msg = current_record.referral_action or danger_detector.get_referral_message(language)
+                    active_signs = current_record.danger_signs_detected or [s["id"] for s in danger_signs]
+                    active_labels = [s.get("label", s.get("id")) for s in danger_signs] if danger_signs else active_signs
+
+                    await websocket.send_text(
+                        _ws_event(
+                            "danger_alert",
+                            {
+                                "signs": active_signs,
+                                "labels": active_labels,
+                                "message": referral_msg,
+                                "source": danger_source,
+                            },
+                        )
+                    )
+                    # Emit draft showing danger flag, with missing fields suppressed
+                    await websocket.send_text(
+                        _ws_event(
+                            "record_draft",
+                            {
+                                "record": current_record.model_dump(mode="json"),
+                                "missing_fields": [],
+                            },
+                        )
+                    )
+                    # Spoken PHC referral instruction ONLY
+                    await websocket.send_text(_ws_event("agent_speaking", {"speaking": True, "text": referral_msg}))
+                    try:
+                        async for chunk in pipeline.stream_speech(referral_msg):
+                            await websocket.send_bytes(chunk)
+                    except Exception as e:
+                        logger.debug("Referral speech stream error: %s", e)
+                    finally:
+                        await websocket.send_text(_ws_event("agent_speaking", {"speaking": False, "text": ""}))
+                    # Exit turn immediately — no administrative prompts during clinical emergencies!
+                    return
+
                 # Emit draft visit record card including missing_fields list
                 await websocket.send_text(
                     _ws_event(
@@ -259,11 +357,18 @@ async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
                     )
                 )
 
-                # Generate concise readback including prompts for any missing fields
+                # Avoid repetitive nagging: pick at most one unasked field to inquire about
+                unasked = [f for f in current_missing_fields if f not in session_asked_fields]
+                fields_to_nudge = []
+                if unasked:
+                    fields_to_nudge = [unasked[0]]
+                    session_asked_fields.add(unasked[0])
+
+                # Generate concise, natural readback
                 readback_text = await readback_generator.generate(
                     current_record,
                     language,
-                    missing_fields=current_missing_fields,
+                    missing_fields=fields_to_nudge,
                 )
                 await websocket.send_text(_ws_event("agent_speaking", {"speaking": True, "text": readback_text}))
                 try:

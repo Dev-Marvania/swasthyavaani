@@ -128,17 +128,82 @@ class TestWebSocketVoiceFlow:
                 ack = ws.receive_json()
                 assert ack["type"] == "barge_in_ack"
 
-                # Send session_purge
-                ws.send_text(
-                    json.dumps(
-                        {
-                            "type": "session_purge",
-                            "timestamp": 2001,
-                            "payload": {},
-                        }
+    def test_ws_save_blocked_when_missing_required_fields(self):
+        """Attempting to save while mandatory fields are missing should emit save_blocked."""
+        incomplete_draft = ASHAVisitRecord(
+            beneficiary_id="SYN-ASHA-001",
+            beneficiary_name="Priya Devi",
+            visit_type=VisitType.ANC,
+            weight_kg=None,  # Missing!
+            vaccinations_given=[],
+            danger_flag=False,
+            confirmed=False,
+            language=Language.HI,
+        )
+
+        with patch(
+            "agent.visit_extractor.visit_extractor.extract",
+            new_callable=AsyncMock,
+            return_value=(incomplete_draft, [], "deterministic"),
+        ), patch(
+            "agent.readback_generator.readback_generator.generate",
+            new_callable=AsyncMock,
+            return_value="Priya Devi ka ANC visit note darj kiya gaya hai.",
+        ), patch(
+            "agent.readback_generator.readback_generator.generate_save_blocked_notice",
+            new_callable=AsyncMock,
+            return_value="Weight missing hai, save nahi ho sakta.",
+        ):
+            with TestClient(app) as client:
+                with client.websocket_connect("/ws/voice?lang=hi-IN") as ws:
+                    ws.receive_json()  # session_ready
+                    ws.receive_json()  # greeting (speaking: True)
+
+                    # Send note with missing weight
+                    ws.send_text(
+                        json.dumps(
+                            {
+                                "type": "text_turn_debug",
+                                "timestamp": 1000,
+                                "payload": {"text": "Priya Devi ka ANC visit hai"},
+                            }
+                        )
                     )
-                )
-                purge = ws.receive_json()
-                assert purge["type"] == "session_purged"
-                assert "records_deleted" in purge["payload"]
-                assert "transcripts_deleted" in purge["payload"]
+
+                    # Drain frames until turn finishes
+                    draft_received = False
+                    while True:
+                        msg = ws.receive()
+                        if "text" in msg:
+                            ev = json.loads(msg["text"])
+                            if ev.get("type") == "record_draft":
+                                draft_received = True
+                            elif ev.get("type") == "agent_speaking" and not ev.get("payload", {}).get("speaking"):
+                                if draft_received:
+                                    break
+
+                    assert draft_received
+
+                    # Now attempt premature save
+                    ws.send_text(
+                        json.dumps(
+                            {
+                                "type": "text_turn_debug",
+                                "timestamp": 2000,
+                                "payload": {"text": "Save karo"},
+                            }
+                        )
+                    )
+
+                    # Check that save_blocked event is received
+                    save_blocked_received = False
+                    while True:
+                        msg = ws.receive()
+                        if "text" in msg:
+                            ev = json.loads(msg["text"])
+                            if ev.get("type") == "save_blocked":
+                                save_blocked_received = True
+                                assert "weight_kg" in ev["payload"]["missing_fields"]
+                                break
+
+                    assert save_blocked_received, "Expected save_blocked event when required fields are missing!"

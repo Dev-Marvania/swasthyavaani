@@ -28,7 +28,7 @@ class ExtractionResult:
     """
     Rich container for extraction output.
     Maintains 3-tuple iteration compatibility (record, danger_signs, danger_source)
-    while exposing missing_fields and detected_language attributes.
+    while exposing missing_fields, detected_language, and na_fields attributes.
     """
 
     def __init__(
@@ -38,12 +38,14 @@ class ExtractionResult:
         danger_source: str,
         missing_fields: Optional[list[str]] = None,
         detected_language: str = "hi-IN",
+        na_fields: Optional[set[str]] = None,
     ) -> None:
         self.record = record
         self.danger_signs = danger_signs
         self.danger_source = danger_source
         self.missing_fields = missing_fields or []
         self.detected_language = detected_language
+        self.na_fields = na_fields or set()
 
     def __iter__(self):
         return iter((self.record, self.danger_signs, self.danger_source))
@@ -121,6 +123,17 @@ class VisitExtractor:
             if not isinstance(val, list):
                 data[k] = [str(val)] if val is not None else []
 
+        # Check for explicit Not Applicable / None declarations in speech
+        if any(w in lower_trans for w in ("koi vaccine nahi", "vaccine nahi", "no vaccine", "tika nahi", "koi injection nahi", "vaccine na", "vaccine n/a")):
+            data["vaccinations_given"] = ["None"]
+
+        if any(w in lower_trans for w in ("appointment nahi", "no appointment", "agla appointment nahi", "next visit nahi", "appointment na", "appointment n/a", "tareekh nahi")):
+            data["next_visit_date"] = None
+            tasks = list(data.get("follow_up_tasks") or [])
+            if "Next visit: Not Applicable" not in tasks:
+                tasks.append("Next visit: Not Applicable")
+            data["follow_up_tasks"] = tasks
+
         # 5. Language enum
         data["language"] = language
 
@@ -133,24 +146,42 @@ class VisitExtractor:
         }
         return {k: v for k, v in data.items() if k in allowed_fields}
 
-    def detect_missing_fields(self, record: ASHAVisitRecord) -> list[str]:
+    def detect_missing_fields(
+        self,
+        record: ASHAVisitRecord,
+        na_fields: Optional[set[str] | list[str]] = None,
+    ) -> list[str]:
         """
         Identify essential clinical fields that were not collected in the spoken notes.
-        Returns a list of missing field names.
+        Excludes any fields explicitly declared 'Not Applicable' (na_fields) or marked as 'None'.
         """
         missing: list[str] = []
+        na_set = set(na_fields or [])
 
-        # 1. Weight is essential for ANC, PNC, and Infant HBNC visits
-        if record.weight_kg is None:
+        # 1. Weight is essential for ANC, PNC, and Infant HBNC visits unless marked N/A
+        if record.weight_kg is None and "weight_kg" not in na_set:
             missing.append("weight_kg")
 
-        # 2. Vaccination status is essential for routine pregnancy and infant visits
-        if not record.vaccinations_given and not record.vaccinations_due:
+        # 2. Vaccination status: resolved if given, due, marked None/N/A, or in na_set
+        vax_given = [str(v).strip().lower() for v in (record.vaccinations_given or [])]
+        vax_resolved = (
+            (bool(record.vaccinations_given) and not all(v == "" for v in vax_given))
+            or bool(record.vaccinations_due)
+            or any(v in ("none", "n/a", "na", "koi nahi") for v in vax_given)
+            or "vaccinations" in na_set
+        )
+        if not vax_resolved:
             if record.visit_type in (VisitType.ANC, VisitType.PNC, VisitType.HBNC, VisitType.IMMUNISATION):
                 missing.append("vaccinations")
 
-        # 3. Next visit date is essential for ANC/PNC continuity
-        if not record.next_visit_date:
+        # 3. Next visit date: resolved if date string present, marked in tasks, or in na_set
+        tasks_lower = [str(t).lower() for t in (record.follow_up_tasks or [])]
+        appt_resolved = (
+            bool(record.next_visit_date)
+            or "next_visit_date" in na_set
+            or any("not applicable" in t or "not scheduled" in t for t in tasks_lower)
+        )
+        if not appt_resolved:
             if record.visit_type in (VisitType.ANC, VisitType.PNC, VisitType.HBNC):
                 missing.append("next_visit_date")
 
@@ -182,9 +213,19 @@ class VisitExtractor:
         # Run dual-path danger detection
         danger_signs, danger_source = await danger_detector.detect(transcript)
 
+        # Detect N/A declarations directly from transcript
+        na_detected: set[str] = set()
+        lower_trans = transcript.lower()
+        if any(w in lower_trans for w in ("koi vaccine nahi", "vaccine nahi", "no vaccine", "tika nahi", "vaccine na", "vaccine n/a", "vaccine not applicable")):
+            na_detected.add("vaccinations")
+        if any(w in lower_trans for w in ("appointment nahi", "no appointment", "agla appointment nahi", "next visit nahi", "appointment na", "appointment n/a", "appointment not applicable")):
+            na_detected.add("next_visit_date")
+        if any(w in lower_trans for w in ("vajan nahi", "weight nahi", "no weight", "scale nahi", "weight na", "weight n/a", "weight not applicable")):
+            na_detected.add("weight_kg")
+
         if not raw_record:
             logger.warning("LLM extraction returned empty result")
-            return ExtractionResult(None, danger_signs, danger_source, [], resolved_lang)
+            return ExtractionResult(None, danger_signs, danger_source, [], resolved_lang, na_detected)
 
         # If LLM identified a specific detected_language, refine resolved_lang
         if raw_record.get("detected_language") in ("hi-IN", "kn-IN", "ta-IN", "te-IN", "mr-IN", "en-IN"):
@@ -204,11 +245,11 @@ class VisitExtractor:
 
         try:
             record = ASHAVisitRecord(**sanitized)
-            missing_fields = self.detect_missing_fields(record)
-            return ExtractionResult(record, danger_signs, danger_source, missing_fields, resolved_lang)
+            missing_fields = self.detect_missing_fields(record, na_fields=na_detected)
+            return ExtractionResult(record, danger_signs, danger_source, missing_fields, resolved_lang, na_detected)
         except Exception as e:
             logger.error("Pydantic validation failed: %s | Sanitized: %s", e, sanitized)
-            return ExtractionResult(None, danger_signs, danger_source, [], resolved_lang)
+            return ExtractionResult(None, danger_signs, danger_source, [], resolved_lang, na_detected)
 
     async def apply_correction(
         self,

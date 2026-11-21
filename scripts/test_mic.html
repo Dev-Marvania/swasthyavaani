@@ -99,6 +99,17 @@
       font-weight: bold;
     }
 
+    .pill-na {
+      color: #94a3b8;
+      background: #1e293b;
+      padding: 2px 8px;
+      border-radius: 4px;
+      border: 1px solid #475569;
+      font-size: 0.8rem;
+      display: inline-block;
+      font-weight: 600;
+    }
+
     .record-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .field-box { background: #0f172a; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); }
     .field-name { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; }
@@ -148,11 +159,12 @@
       <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px;">
         <span style="font-size: 0.75rem; color: var(--text-muted);">Quick-Test Scenarios (Simulate Spoken Notes across Languages):</span>
         <div class="row">
-          <button class="btn-quick" onclick="sendQuickText('Priya Devi ka ANC visit hai, TT-1 injection diya.')">⚠️ Missing Weight Note</button>
-          <button class="btn-quick" onclick="sendQuickText('Priya Devi ka ANC visit hai, weight 55 kilo hai, bleeding ho rahi hai.')">🚨 ANC + Bleeding (Hindi)</button>
-          <button class="btn-quick" onclick="sendQuickText('ಕವಿತಾ ಅವರಿಗೆ ಹೆರಿಗೆ ನಂತರದ ತಪಾಸಣೆ ಮಾಡಿದೆ, ತೂಕ 52 ಕೆಜಿ ಇದೆ.')">ಕನ್ನಡ PNC Note (Kannada)</button>
-          <button class="btn-quick" onclick="sendQuickText('Nahi, weight 58 kilo tha.')">⚖️ Weight Correction</button>
-          <button class="btn-quick" onclick="sendQuickText('Haan theek hai, save karo.')">✅ Confirm & Save</button>
+          <button class="btn-quick" onclick="sendQuickText('Priya Devi ka ANC visit hai, second trimester.')">1. ANC Note (No Weight)</button>
+          <button class="btn-quick" onclick="sendQuickText('Weight 55 kilo hai, TT-1 injection diya.')">2. Add Weight & Vaccine</button>
+          <button class="btn-quick" onclick="sendQuickText('Koi vaccine nahi di, agla appointment nahi hai.')">3. Say Vaccine & Appt N/A</button>
+          <button class="btn-quick" onclick="sendQuickText('Lekin bahut tez bleeding shuru ho gayi hai.')">4. 🚨 Danger Sign (Bleeding)</button>
+          <button class="btn-quick" onclick="sendQuickText('Save karo.')">5. ⚠️ Attempt Early Save</button>
+          <button class="btn-quick" onclick="sendQuickText('Haan theek hai, save karo.')">6. ✅ Confirm & Save</button>
         </div>
         <div class="row" style="margin-top: 4px;">
           <input type="text" id="customInput" placeholder="Or type a custom spoken phrase to test auto-detection..." />
@@ -348,6 +360,14 @@
           valDanger.style.color = "#ef4444";
           break;
 
+        case "save_blocked":
+          const blkMissing = (p.missing_fields || []).join(", ");
+          log(`⚠️ Save Blocked! Missing required fields: ${blkMissing}`);
+          statusBadge.innerText = "Save Blocked";
+          statusBadge.className = "status-badge status-speaking";
+          alert(`⚠️ Cannot save visit register yet!\n\nMissing required fields: ${blkMissing}\n\nPlease provide these details or say 'Not Applicable'.`);
+          break;
+
         case "record_draft":
         case "record_confirmed":
           const r = p.record || {};
@@ -367,14 +387,23 @@
             valWeight.innerText = `${r.weight_kg} kg`;
           } else if (missing.includes("weight_kg")) {
             valWeight.innerHTML = '<span class="text-warning">⚠️ Not Collected</span>';
+          } else if (r.visit_type) {
+            valWeight.innerHTML = '<span class="pill-na">N/A</span>';
           } else {
             valWeight.innerText = "—";
           }
 
-          if (r.vaccinations_given && r.vaccinations_given.length > 0) {
-            valVax.innerText = r.vaccinations_given.join(", ");
+          const vaxList = r.vaccinations_given || [];
+          if (vaxList.length > 0) {
+            if (vaxList.some(v => ["none", "n/a", "na"].includes(String(v).toLowerCase().trim()))) {
+              valVax.innerHTML = '<span class="pill-na">None / N/A</span>';
+            } else {
+              valVax.innerText = vaxList.join(", ");
+            }
           } else if (missing.includes("vaccinations")) {
             valVax.innerHTML = '<span class="text-warning">⚠️ Not Collected</span>';
+          } else if (r.visit_type) {
+            valVax.innerHTML = '<span class="pill-na">None / N/A</span>';
           } else {
             valVax.innerText = "—";
           }
@@ -385,6 +414,8 @@
             valNext.innerText = r.next_visit_date;
           } else if (missing.includes("next_visit_date")) {
             valNext.innerHTML = '<span class="text-warning">⚠️ Not Collected</span>';
+          } else if (r.visit_type) {
+            valNext.innerHTML = '<span class="pill-na">Not Scheduled / N/A</span>';
           } else {
             valNext.innerText = "—";
           }
@@ -396,11 +427,6 @@
             valDanger.innerText = "Normal";
             valDanger.style.color = "#10b981";
           }
-
-          if (ev.type === "record_confirmed") {
-            alert(`✅ Visit Record Confirmed & Saved into Encrypted SQLite! Saved ID: ${p.saved_id}`);
-          }
-          break;
 
           if (ev.type === "record_confirmed") {
             alert(`✅ Visit Record Confirmed & Saved into Encrypted SQLite! Saved ID: ${p.saved_id}`);
