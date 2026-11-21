@@ -35,7 +35,16 @@ class GnaniPrismaSTT:
 
     @property
     def is_connected(self) -> bool:
-        return self._ws is not None and not self._closed
+        if self._ws is None or self._closed:
+            return False
+        state = getattr(self._ws, "state", None)
+        if state is not None:
+            try:
+                from websockets.protocol import State
+                return state == State.OPEN
+            except Exception:
+                pass
+        return bool(getattr(self._ws, "open", False))
 
     async def connect(self, language: str = "hi-IN") -> None:
         """Connect WebSocket to Gnani Prisma v3.0 STT."""
@@ -70,7 +79,7 @@ class GnaniPrismaSTT:
         """Ensure STT WebSocket is connected and ready."""
         if self._closed:
             return False
-        if self._ws is None or self._ws.closed:
+        if not self.is_connected:
             try:
                 logger.info("Auto-reconnecting Gnani Prisma STT [lang=%s]...", self._language)
                 await self.connect(self._language)
@@ -84,23 +93,21 @@ class GnaniPrismaSTT:
         """Send 16 kHz 16-bit mono PCM bytes to STT, auto-reconnecting if disconnected."""
         if self._closed:
             return
-        if self._ws is None or self._ws.closed:
+        if not self.is_connected:
             ok = await self.ensure_connected()
-            if not ok or not self._ws:
+            if not ok or not self.is_connected:
                 return
 
         try:
             await self._ws.send(pcm_chunk)
-        except websockets.ConnectionClosed:
-            logger.info("STT connection closed during audio send, auto-reconnecting...")
+        except Exception as e:
+            logger.info("STT connection send failed (%s), auto-reconnecting...", e)
             self._ws = None
             if await self.ensure_connected() and self._ws:
                 try:
                     await self._ws.send(pcm_chunk)
                 except Exception:
                     pass
-        except Exception as e:
-            logger.warning("Error sending audio to STT: %s", e)
 
     async def _listen_loop(self) -> None:
         """Background receiver for STT messages."""
@@ -144,7 +151,7 @@ class GnaniPrismaSTT:
         if self._closed:
             return
         await asyncio.sleep(0.1)
-        if not self._closed and (self._ws is None or self._ws.closed):
+        if not self._closed and not self.is_connected:
             await self.ensure_connected()
 
     async def change_language(self, language: str) -> None:

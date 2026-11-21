@@ -244,7 +244,10 @@ async def voice_websocket(websocket: WebSocket, lang: str = "hi-IN"):
             if "bytes" in data and data["bytes"]:
                 # ── Binary PCM audio frame (Client Mic → Server) ──
                 pcm_chunk: bytes = data["bytes"]
-                await pipeline.process_pcm_chunk(pcm_chunk)
+                try:
+                    await pipeline.process_pcm_chunk(pcm_chunk)
+                except Exception as e:
+                    logger.debug("Error processing audio chunk: %s", e)
 
             elif "text" in data and data["text"]:
                 # ── JSON control frame (Client → Server) ──
