@@ -213,3 +213,69 @@ class TestWebSocketVoiceFlow:
                                 break
 
                     assert save_blocked_received, "Expected save_blocked event when required fields are missing!"
+
+    def test_language_transition_stt_failure_resilience(self, monkeypatch):
+        """
+        Verify that if Gnani STT connection fails during an auto-detected language transition
+        or a manual language_change frame, the WebSocket session stays alive, emits
+        language_detected, delivers the record draft, and stays responsive.
+        """
+        async def _failing_connect(*args, **kwargs):
+            raise ConnectionError("server rejected WebSocket connection: HTTP 403")
+
+        # Mock STT connect to fail on language transition
+        monkeypatch.setattr("voice.stt_service.GnaniPrismaSTT.connect", _failing_connect)
+
+        with TestClient(app) as client:
+            with client.websocket_connect("/ws/voice?lang=hi-IN") as ws:
+                ready_ev = ws.receive_json()
+                assert ready_ev["type"] == "session_ready"
+                assert ready_ev["payload"]["language"] == "hi-IN"
+
+                # Send note that triggers auto-detection of en-IN
+                ws.send_text(
+                    json.dumps(
+                        {
+                            "type": "text_turn_debug",
+                            "timestamp": 1000,
+                            "payload": {
+                                "text": "Fatima Bee ka second trimester ANC visit hua, IFA goli di."
+                            },
+                        }
+                    )
+                )
+
+                events = []
+                while True:
+                    msg = ws.receive()
+                    if "text" in msg:
+                        ev = json.loads(msg["text"])
+                        events.append(ev)
+                        if ev.get("type") == "agent_speaking" and not ev.get("payload", {}).get("speaking"):
+                            break
+
+                event_types = [e["type"] for e in events]
+                assert "language_detected" in event_types
+                assert "record_draft" in event_types
+
+                lang_ev = next(e for e in events if e["type"] == "language_detected")
+                assert lang_ev["payload"]["language"] == "en-IN"
+
+                draft_ev = next(e for e in events if e["type"] == "record_draft")
+                assert draft_ev["payload"]["record"]["beneficiary_id"] == "SYN-ASHA-007"
+                assert draft_ev["payload"]["record"]["beneficiary_name"] == "Fatima Bee"
+
+                # Also verify manual language_change does not crash on STT failure
+                ws.send_text(
+                    json.dumps(
+                        {
+                            "type": "language_change",
+                            "timestamp": 2000,
+                            "payload": {"language": "te-IN"},
+                        }
+                    )
+                )
+                m2 = ws.receive_json()
+                assert m2["type"] == "session_ready"
+                assert m2["payload"]["language"] == "te-IN"
+

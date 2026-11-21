@@ -71,7 +71,10 @@ class SwasthyaVaaniPipeline:
     async def change_language(self, language: str) -> None:
         """Switch language in active session."""
         self.language = language
-        await self.stt.change_language(language)
+        try:
+            await self.stt.change_language(language)
+        except Exception as e:
+            logger.warning("STT change_language failed for %s: %s", language, e)
         logger.info("Pipeline language changed to: %s", language)
 
     async def stream_speech(self, text: str) -> AsyncGenerator[bytes, None]:

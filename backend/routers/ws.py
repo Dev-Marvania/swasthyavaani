@@ -519,5 +519,10 @@ async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
         logger.info("WebSocket disconnected: %s", session_id)
     except Exception as e:
         logger.error("Error in WebSocket session %s: %s", session_id, e)
+        try:
+            await websocket.send_text(_ws_event("error", {"code": "INTERNAL_ERROR", "message": str(e)}))
+            await websocket.close(code=1011)
+        except Exception:
+            pass
     finally:
         await pipeline.shutdown()
