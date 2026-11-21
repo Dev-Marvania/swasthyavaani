@@ -38,8 +38,22 @@ MOCK_VISIT_DRAFT = ASHAVisitRecord(
 class TestWebSocketVoiceFlow:
     """End-to-end WebSocket protocol tests."""
 
+    @pytest.fixture(autouse=True)
+    def mock_voice_services(self, monkeypatch):
+        async def _mock_stream(*args, **kwargs):
+            yield b"\x00" * 320
+
+        async def _mock_connect(*args, **kwargs):
+            return
+
+        monkeypatch.setattr("backend.routers.ws.SwasthyaVaaniPipeline.stream_speech", _mock_stream)
+        monkeypatch.setattr("voice.pipeline.SwasthyaVaaniPipeline.stream_speech", _mock_stream)
+        monkeypatch.setattr("voice.tts_service.GnaniTimbreTTS.synthesize", _mock_stream)
+        monkeypatch.setattr("voice.stt_service.GnaniPrismaSTT.connect", _mock_connect)
+        monkeypatch.setattr("agent.llm_client.LLMClient.generate_readback", AsyncMock(return_value="Priya Devi ka ANC visit note darj kiya gaya hai."))
+
     def test_ws_connection_and_greeting(self):
-        """Verify session_ready and agent_speaking greeting."""
+        """Verify session_ready in silent listening mode (no unprompted greeting)."""
         with TestClient(app) as client:
             with client.websocket_connect("/ws/voice?lang=hi-IN") as ws:
                 m1 = ws.receive_json()
@@ -47,15 +61,10 @@ class TestWebSocketVoiceFlow:
                 assert m1["payload"]["language"] == "hi-IN"
                 assert m1["payload"]["audio_sample_rate"] == 16000
 
-                m2 = ws.receive_json()
-                assert m2["type"] == "agent_speaking"
-                assert m2["payload"]["speaking"] is True
-                assert "SwasthyaVaani" in m2["payload"]["text"]
-
     def test_ws_danger_alert_and_draft_flow(self):
         """Simulate visit note with danger sign and verify danger_alert + record_draft."""
         with patch(
-            "agent.visit_extractor.visit_extractor.extract",
+            "backend.routers.ws.visit_extractor.extract",
             new_callable=AsyncMock,
             return_value=(
                 MOCK_VISIT_DRAFT,
@@ -63,14 +72,13 @@ class TestWebSocketVoiceFlow:
                 "deterministic",
             ),
         ), patch(
-            "agent.readback_generator.readback_generator.generate",
+            "backend.routers.ws.readback_generator.generate",
             new_callable=AsyncMock,
             return_value="Priya Devi ka ANC visit record darj ho gaya.",
         ):
             with TestClient(app) as client:
                 with client.websocket_connect("/ws/voice?lang=hi-IN") as ws:
-                    ws.receive_json()  # session_ready
-                    ws.receive_json()  # greeting agent_speaking
+                    ws.receive_json()  # session_ready (silent connection)
 
                     # Send debug turn
                     ws.send_text(
@@ -86,10 +94,13 @@ class TestWebSocketVoiceFlow:
                     )
 
                     events = []
-                    for _ in range(6):
+                    while True:
                         msg = ws.receive()
                         if "text" in msg:
-                            events.append(json.loads(msg["text"]))
+                            data = json.loads(msg["text"])
+                            events.append(data)
+                            if data.get("type") == "agent_speaking" and not data.get("payload", {}).get("speaking"):
+                                break
 
                     event_types = [e["type"] for e in events]
                     assert "transcript_final" in event_types
@@ -110,10 +121,7 @@ class TestWebSocketVoiceFlow:
         """Verify barge_in_ack and session_purge events."""
         with TestClient(app) as client:
             with client.websocket_connect("/ws/voice?lang=hi-IN") as ws:
-                ws.receive_json()  # session_ready
-                m = ws.receive_json()  # greeting (speaking: True)
-                if m.get("type") == "agent_speaking" and m.get("payload", {}).get("speaking"):
-                    ws.receive_json()  # greeting end (speaking: False)
+                ws.receive_json()  # session_ready (silent connection)
 
                 # Send barge_in
                 ws.send_text(
@@ -142,24 +150,22 @@ class TestWebSocketVoiceFlow:
         )
 
         with patch(
-            "agent.visit_extractor.visit_extractor.extract",
+            "backend.routers.ws.visit_extractor.extract",
             new_callable=AsyncMock,
             return_value=(incomplete_draft, [], "deterministic"),
         ), patch(
-            "agent.readback_generator.readback_generator.generate",
+            "backend.routers.ws.readback_generator.generate",
             new_callable=AsyncMock,
             return_value="Priya Devi ka ANC visit note darj kiya gaya hai.",
         ), patch(
-            "agent.readback_generator.readback_generator.generate_save_blocked_notice",
+            "backend.routers.ws.readback_generator.generate_save_blocked_notice",
             new_callable=AsyncMock,
             return_value="Weight missing hai, save nahi ho sakta.",
         ):
             with TestClient(app) as client:
                 with client.websocket_connect("/ws/voice?lang=hi-IN") as ws:
-                    ws.receive_json()  # session_ready
-                    ws.receive_json()  # greeting (speaking: True)
+                    ws.receive_json()  # session_ready (silent connection)
 
-                    # Send note with missing weight
                     ws.send_text(
                         json.dumps(
                             {

@@ -25,17 +25,11 @@ async def run_session(ws_url: str, lang: str, text: str | None, simulate_voice: 
 
     try:
         async with websockets.connect(url) as ws:
-            # 1. Wait for session_ready
+            # 1. Wait for session_ready (silent listening mode per Pipecat Rule 2)
             msg1 = await ws.recv()
             if isinstance(msg1, str):
                 d1 = json.loads(msg1)
                 logger.info("📡 Event: %s | Payload: %s", d1.get("type"), d1.get("payload"))
-
-            # 2. Wait for AI disclosure greeting
-            msg2 = await ws.recv()
-            if isinstance(msg2, str):
-                d2 = json.loads(msg2)
-                logger.info("🗣️ Greeting: %s", d2.get("payload", {}).get("text"))
 
             if text:
                 logger.info("📝 Sending text turn debug: '%s'", text)

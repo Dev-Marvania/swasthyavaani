@@ -56,7 +56,12 @@ def test_stt_metadata_priority():
 
 def test_default_fallback():
     assert detect_language("") == "hi-IN"
-    assert detect_language("Normal routine checkup completed.") == "hi-IN"
+    assert detect_language("12345 67890 ... ???") == "hi-IN"
+
+
+def test_english_detection():
+    assert detect_language("The patient had a routine checkup today. Weight is 52 kg.") == "en-IN"
+    assert detect_language("Normal routine checkup completed.") == "en-IN"
 
 
 def test_get_language_label():

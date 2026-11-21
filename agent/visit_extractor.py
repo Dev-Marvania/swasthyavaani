@@ -71,33 +71,48 @@ class VisitExtractor:
 
         # 1. beneficiary_id: Must match ^SYN-ASHA-[0-9]{3,}$
         ben_id = str(data.get("beneficiary_id") or "")
-        if not re.match(r"^SYN-ASHA-[0-9]{3,}$", ben_id):
-            if "priya" in lower_trans:
-                data["beneficiary_id"] = "SYN-ASHA-001"
-                data["beneficiary_name"] = data.get("beneficiary_name") or "Priya Devi"
-            elif "meena" in lower_trans:
-                data["beneficiary_id"] = "SYN-ASHA-002"
-                data["beneficiary_name"] = data.get("beneficiary_name") or "Meena Kumari"
-            elif "kavitha" in lower_trans:
-                data["beneficiary_id"] = "SYN-ASHA-003"
-                data["beneficiary_name"] = data.get("beneficiary_name") or "Kavitha S"
-            elif "lakshmi" in lower_trans:
-                data["beneficiary_id"] = "SYN-ASHA-004"
-                data["beneficiary_name"] = data.get("beneficiary_name") or "Lakshmi R"
+        ben_name = data.get("beneficiary_name")
+
+        beneficiaries = [
+            (["priya", "प्रिया", "ಪ್ರಿಯಾ", "பிரியா", "ప్రియా"], "SYN-ASHA-001", "Priya Devi"),
+            (["meena", "मीना", "ಮೀನಾ", "மீனா", "మీనా"], "SYN-ASHA-002", "Meena Kumari"),
+            (["kavitha", "कविता", "ಕವಿತಾ", "கவிதா", "కవిత"], "SYN-ASHA-003", "Kavitha S"),
+            (["lakshmi", "लक्ष्मी", "ಲಕ್ಷ್ಮಿ", "லட்சுமி", "లక్ష్మి"], "SYN-ASHA-004", "Lakshmi R"),
+            (["sunita", "सुनिता", "सुनीता", "ಸುನಿತಾ", "சுனிதா", "సునితా"], "SYN-ASHA-005", "Sunita Bai"),
+            (["anjali", "अंजली", "अंजलि", "ಅಂಜಲಿ", "அஞ்சலி", "అంజలి"], "SYN-ASHA-006", "Anjali Devi"),
+            (["fatima", "फातिमा", "ಫಾತಿಮಾ", "பாத்திமா", "ఫాతిమా"], "SYN-ASHA-007", "Fatima Bee"),
+            (["radha", "राधा", "ರಾಧಾ", "ராதா", "రాధా"], "SYN-ASHA-008", "Radha M"),
+        ]
+
+        # Check if transcript mentions any of the 8 registered synthetic beneficiaries
+        matched = False
+        for aliases, bid, bname in beneficiaries:
+            if any(alias in lower_trans for alias in aliases):
+                data["beneficiary_id"] = bid
+                data["beneficiary_name"] = ben_name or bname
+                matched = True
+                break
+
+        if not matched:
+            if re.match(r"^SYN-ASHA-[0-9]{3,}$", ben_id):
+                data["beneficiary_id"] = ben_id
+                data["beneficiary_name"] = ben_name
             else:
-                data["beneficiary_id"] = "SYN-ASHA-001"
-                data["beneficiary_name"] = data.get("beneficiary_name") or "Priya Devi"
+                data["beneficiary_id"] = "SYN-ASHA-999"
+                data["beneficiary_name"] = None
 
         # 2. visit_type: Must be valid VisitType enum
-        vt = str(data.get("visit_type") or "ANC").upper()
-        if "ANC" in vt:
+        vt = str(data.get("visit_type") or "").upper()
+        if any(w in lower_trans for w in ("anc", "prenatal", "garbhavati", "pregnant", "ಗರ್ಭಿಣಿ", "கர்ப்பிணி", "గర్భిణి", "गर्भवती")) or "ANC" in vt:
             data["visit_type"] = "ANC"
-        elif "PNC" in vt:
+        elif any(w in lower_trans for w in ("pnc", "postpartum", "prasav", "delivery", "post delivery", "हेರಿಗೆ", "ಪ್ರಸವ", "பிரசவம்", "ప్రసవం", "प्रसूती")) or "PNC" in vt:
             data["visit_type"] = "PNC"
-        elif "HBNC" in vt:
+        elif any(w in lower_trans for w in ("hbnc", "navjat", "newborn", "shishu", "नवजात", "ಶಿಶು")) or "HBNC" in vt:
             data["visit_type"] = "HBNC"
-        elif "IMMUN" in vt or "TIKA" in vt:
+        elif any(w in lower_trans for w in ("immun", "tikakaran", "vaccination", "tika", "लसीकरण", "ಲಸಿಕೆ", "தடுப்பூசி", "టీకా")) or "IMMUN" in vt:
             data["visit_type"] = "Immunisation"
+        elif vt in ("ANC", "PNC", "HBNC", "IMMUNISATION", "GENERAL"):
+            data["visit_type"] = vt.capitalize() if vt != "IMMUNISATION" else "Immunisation"
         else:
             data["visit_type"] = "General"
 
@@ -113,15 +128,62 @@ class VisitExtractor:
             except (ValueError, TypeError):
                 data["weight_kg"] = None
         else:
-            m_w = re.search(r"(\d+(\.\d+)?)\s*(kilo|kg)", lower_trans)
+            # Deterministic multilingual regex for weight mentions across English, Hindi, Kannada, Tamil, Telugu, Marathi
+            m_w = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:kilo|kg|kilos|kilograms|kgs|ಕೆಜಿ|கிலோ|కిలో|किलो)(?:\b|\s|$)", lower_trans)
+            if not m_w:
+                m_w = re.search(r"(?:weight|vajan|wazan|thooka|thuka|edai|baruvu|वजन|ತೂಕ|ಎಡೆ|எடை|బరువు)\s*(?:is|hai|agide|irukku|undi|aahe|ahe)?\s*[:\s]*(\d+(?:[.,]\d+)?)", lower_trans)
             if m_w:
-                data["weight_kg"] = float(m_w.group(1))
+                try:
+                    val = float(m_w.group(1).replace(",", "."))
+                    if 0.5 <= val <= 150.0:
+                        data["weight_kg"] = val
+                except (ValueError, TypeError):
+                    pass
 
         # 4. Ensure list fields are always lists, never None
         for k in ["vaccinations_due", "vaccinations_given", "supplements_given", "follow_up_tasks", "danger_signs_detected"]:
             val = data.get(k)
             if not isinstance(val, list):
                 data[k] = [str(val)] if val is not None else []
+
+        # Deterministic Clinical Keyword Extraction (Vaccines & Supplements)
+        # Ensure vaccines explicitly spoken in transcript are captured even if LLM missed them
+        vax_patterns = [
+            (r"\btt[- ]?1\b", "TT-1"),
+            (r"\btt[- ]?2\b", "TT-2"),
+            (r"\btt[- ]?booster\b", "TT-Booster"),
+            (r"\bbcg\b", "BCG"),
+            (r"\bopv\b|\bpolio\b", "OPV"),
+            (r"\bpentavalent\b|\bpenta[- ]?\d?\b", "Pentavalent"),
+            (r"\brotavirus\b|\brota\b", "Rotavirus"),
+            (r"\bmr[- ]?\d?\b|\bmeasles\b", "MR"),
+            (r"\bhep(atitis)?[- ]?b\b", "Hepatitis B"),
+            (r"\bvitamin[- ]?a\b|\bvit[- ]?a\b", "Vitamin A"),
+        ]
+        existing_vax = [str(x).lower() for x in (data.get("vaccinations_given") or [])]
+        if "none" not in existing_vax:
+            new_vax = list(data.get("vaccinations_given") or [])
+            for pat, name in vax_patterns:
+                if re.search(pat, lower_trans) and not any(name.lower() in v for v in existing_vax):
+                    new_vax.append(name)
+                    existing_vax.append(name.lower())
+            data["vaccinations_given"] = new_vax
+
+        # Deterministic Supplement Keywords
+        supp_patterns = [
+            (r"\bifa\b|\biron\b|\biron[- ]folic\b", "IFA tablets"),
+            (r"\bcalcium\b", "Calcium tablets"),
+            (r"\balbendazole\b|\bdeworming\b", "Albendazole"),
+            (r"\bors\b", "ORS"),
+            (r"\bzinc\b", "Zinc"),
+        ]
+        existing_supp = [str(x).lower() for x in (data.get("supplements_given") or [])]
+        new_supp = list(data.get("supplements_given") or [])
+        for pat, name in supp_patterns:
+            if re.search(pat, lower_trans) and not any(name.lower() in s for s in existing_supp):
+                new_supp.append(name)
+                existing_supp.append(name.lower())
+        data["supplements_given"] = new_supp
 
         # Check for explicit Not Applicable / None declarations in speech
         if any(w in lower_trans for w in ("koi vaccine nahi", "vaccine nahi", "no vaccine", "tika nahi", "koi injection nahi", "vaccine na", "vaccine n/a")):

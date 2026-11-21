@@ -67,45 +67,82 @@ class LLMClient:
     def _fallback_rule_generation(self, system_prompt: str, user_prompt: str) -> str:
         """Local rule-based fallback when offline or in sandboxed test mode."""
         import re
+        from agent.danger_detector import danger_detector
 
         lower = user_prompt.lower()
 
         # Check if this is a correction request
         if "correction" in system_prompt.lower() or "current record:" in lower:
             # Extract updated weight if present
-            m_weight = re.search(r"(\d+(\.\d+)?)\s*(kilo|kg)", lower)
+            m_weight = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:kilo|kg|kilos|kilograms|kgs|ಕೆಜಿ|கிலோ|కిలో|किलो)\b", lower)
+            if not m_weight:
+                m_weight = re.search(r"(?:weight|vajan|wazan|thooka|thuka|edai|baruvu|वजन|ತೂಕ|ಎಡೆ|எடை|బరువు)\s*(?:is|hai|agide|irukku|undi|aahe|ahe)?\s*[:\s]*(\d+(?:[.,]\d+)?)", lower)
             if m_weight:
-                val = float(m_weight.group(1))
+                val = float(m_weight.group(1).replace(",", "."))
                 return json.dumps({"weight_kg": val})
             return json.dumps({})
 
-        # Beneficiary mapping
-        ben_id = "SYN-ASHA-001"
-        ben_name = "Priya Devi"
-        if "meena" in lower:
-            ben_id = "SYN-ASHA-002"
-            ben_name = "Meena Kumari"
-        elif "kavitha" in lower:
-            ben_id = "SYN-ASHA-003"
-            ben_name = "Kavitha S"
-        elif "lakshmi" in lower:
-            ben_id = "SYN-ASHA-004"
-            ben_name = "Lakshmi R"
+        # Beneficiary mapping: check all 8 synthetic beneficiaries
+        beneficiaries = [
+            (["priya", "प्रिया", "ಪ್ರಿಯಾ", "பிரியா", "ప్రియా"], "SYN-ASHA-001", "Priya Devi"),
+            (["meena", "மீனா", "ಮೀನಾ", "மீனா", "మీనా"], "SYN-ASHA-002", "Meena Kumari"),
+            (["kavitha", "कविता", "ಕವಿತಾ", "கவிதா", "కవిత"], "SYN-ASHA-003", "Kavitha S"),
+            (["lakshmi", "लक्ष्मी", "ಲಕ್ಷ್ಮಿ", "லட்சுமி", "లక్ష్మి"], "SYN-ASHA-004", "Lakshmi R"),
+            (["sunita", "सुनिता", "सुनीता", "ಸುನಿತಾ", "சுனிதா", "సునితా"], "SYN-ASHA-005", "Sunita Bai"),
+            (["anjali", "अंजली", "अंजलि", "ಅಂಜಲಿ", "அஞ்சலி", "అంజలి"], "SYN-ASHA-006", "Anjali Devi"),
+            (["fatima", "फातिमा", "ಫಾತಿಮಾ", "பாத்திமா", "ఫాతిమా"], "SYN-ASHA-007", "Fatima Bee"),
+            (["radha", "राधा", "ರಾಧಾ", "ராதா", "రాధా"], "SYN-ASHA-008", "Radha M"),
+        ]
+        ben_id = "SYN-ASHA-999"
+        ben_name = None
+        for aliases, bid, bname in beneficiaries:
+            if any(alias in lower for alias in aliases):
+                ben_id = bid
+                ben_name = bname
+                break
 
-        # Visit type
-        vt = "ANC"
-        if "pnc" in lower:
+        # Visit type: ANC, PNC, HBNC, Immunisation, default General
+        vt = "General"
+        if any(w in lower for w in ("anc", "prenatal", "garbhavati", "pregnant", "ಗರ್ಭಿಣಿ", "கர்ப்பிணி", "గర్భిణి", "गर्भवती")):
+            vt = "ANC"
+        elif any(w in lower for w in ("pnc", "postpartum", "prasav", "delivery", "post delivery", "हेರಿಗೆ", "ಪ್ರಸವ", "பிரசவம்", "ప్రసవం", "प्रसूती")):
             vt = "PNC"
-        elif "hbnc" in lower:
+        elif any(w in lower for w in ("hbnc", "navjat", "newborn", "shishu", "नवजात", "ಶಿಶು")):
             vt = "HBNC"
-        elif "immun" in lower or "tikakaran" in lower:
+        elif any(w in lower for w in ("immun", "tikakaran", "vaccination", "tika", "लसीकरण", "ಲಸಿಕೆ", "தடுப்பூசி", "టీకా")):
             vt = "Immunisation"
 
-        # Weight
-        weight = 55.0
-        m = re.search(r"(\d+(\.\d+)?)\s*(kilo|kg)", lower)
+        # Weight: extract ONLY if spoken (kg/kilo/vajan/thooka/etc.); else None (NEVER 55.0)
+        weight = None
+        m = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:kilo|kg|kilos|kilograms|kgs|ಕೆಜಿ|கிலோ|కిలో|किलो)(?:\b|\s|$)", lower)
+        if not m:
+            m = re.search(r"(?:weight|vajan|wazan|thooka|thuka|edai|baruvu|वजन|ತೂಕ|ಎಡೆ|எடை|బరువు)\s*(?:is|hai|agide|irukku|undi|aahe|ahe)?\s*[:\s]*(\d+(?:[.,]\d+)?)", lower)
         if m:
-            weight = float(m.group(1))
+            try:
+                w_val = float(m.group(1).replace(",", "."))
+                if 0.5 <= w_val <= 150.0:
+                    weight = w_val
+            except (ValueError, TypeError):
+                weight = None
+
+        # Next visit date: extract ONLY if spoken; else None (NEVER "2026-12-10")
+        next_visit_date = None
+        m_date = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", lower)
+        if m_date:
+            next_visit_date = m_date.group(1)
+        else:
+            m_date_dmy = re.search(r"\b(\d{2})[/-](\d{2})[/-](\d{4})\b", lower)
+            if m_date_dmy:
+                next_visit_date = f"{m_date_dmy.group(3)}-{m_date_dmy.group(2)}-{m_date_dmy.group(1)}"
+
+        # Follow-up tasks: extract ONLY if spoken; else [] (NEVER ["Check BP next visit"])
+        follow_up_tasks = []
+        if "bp check" in lower or "check bp" in lower or "bp jaanch" in lower or "bp parikshe" in lower:
+            follow_up_tasks.append("Check BP")
+        if "blood test" in lower or "khoon ki jaanch" in lower or "rakta parikshe" in lower:
+            follow_up_tasks.append("Blood test")
+        if "sonography" in lower or "ultrasound" in lower:
+            follow_up_tasks.append("Ultrasound")
 
         # Vaccines & supplements
         vax_given = []
@@ -113,6 +150,10 @@ class LLMClient:
             vax_given.append("TT-1")
         if "tt-2" in lower or "tt 2" in lower:
             vax_given.append("TT-2")
+        if "bcg" in lower:
+            vax_given.append("BCG")
+        if "opv" in lower:
+            vax_given.append("OPV-0")
 
         supps = []
         if "ifa" in lower:
@@ -120,22 +161,36 @@ class LLMClient:
         if "calcium" in lower:
             supps.append("calcium goli")
 
+        # Vaccinations due: extract ONLY if explicitly spoken; else [] (NEVER ["TT-2"])
+        vaccinations_due = []
+        m_due = re.search(r"(?:due|baaki|bakki)\s*(?:hai|is)?\s*[:\s]*([a-zA-Z0-9\-]+)", lower)
+        if m_due:
+            v = m_due.group(1).upper()
+            if any(k in v for k in ("TT", "BCG", "PENTA", "OPV", "ROTA", "MEASLES", "MR", "JE")):
+                vaccinations_due.append(v)
+
+        # Danger signs check
+        danger_signs = danger_detector.deterministic_check(user_prompt)
+        danger_flag = len(danger_signs) > 0
+        danger_signs_detected = [s["id"] for s in danger_signs]
+        referral_action = danger_detector.get_referral_message("hi-IN") if danger_flag else None
+
         return json.dumps(
             {
                 "beneficiary_id": ben_id,
                 "beneficiary_name": ben_name,
                 "visit_type": vt,
                 "weight_kg": weight,
-                "vaccinations_due": ["TT-2"] if "TT-1" in vax_given else [],
+                "vaccinations_due": vaccinations_due,
                 "vaccinations_given": vax_given,
                 "supplements_given": supps,
-                "next_visit_date": "2026-12-10",
-                "follow_up_tasks": ["Check BP next visit"],
-                "danger_flag": False,
-                "danger_signs_detected": [],
-                "referral_action": None,
+                "next_visit_date": next_visit_date,
+                "follow_up_tasks": follow_up_tasks,
+                "danger_flag": danger_flag,
+                "danger_signs_detected": danger_signs_detected,
+                "referral_action": referral_action,
                 "confirmed": False,
-                "notes_summary": "Extracted visit record",
+                "notes_summary": f"{vt} visit notes" if ben_name is None else f"{vt} visit for {ben_name}",
             }
         )
 

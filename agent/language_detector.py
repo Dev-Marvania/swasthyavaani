@@ -55,6 +55,19 @@ CODEMIX_KEYWORDS = {
         "khatre", "lakshan", "bina", "deri", "turant", "nazdeeki", "rahi", "raha",
         "hai", "tha", "thi", "diya", "liya", "karo", "theek", "sahi", "kripya",
         "bacche", "mareez", "bukhar", "dard", "khoon", "aaj", "kilo", "vajan",
+        "ka", "ki", "ke", "ko", "se", "mein", "me", "aur", "kiya", "gaya", "gayi", "bhi",
+    },
+    "en-IN": {
+        "patient", "visit", "pregnant", "trimester", "checkup", "weight", "kilograms", "kilo", "kilos",
+        "vaccine", "vaccination", "injection", "tablet", "tablets", "routine", "today",
+        "bleeding", "fever", "pain", "hospital", "delivery", "baby", "infant", "mother",
+        "appointment", "scheduled", "examination", "normal", "healthy", "reported", "completed",
+        "the", "is", "was", "and", "she", "her", "he", "his", "has", "have", "had",
+        "with", "for", "from", "at", "to", "in", "on", "no", "not", "all", "good",
+        "blood", "pressure", "temperature", "pulse", "given", "due", "follow",
+        "up", "advised", "complaints", "headache", "vomiting", "swelling",
+        "iron", "folic", "acid", "calcium", "syrup", "capsule", "dose", "referred",
+        "phc", "clinic", "chc", "weeks", "months", "days", "child", "nutrition",
     },
 }
 
@@ -110,6 +123,10 @@ def detect_language(text: str, hint_lang: Optional[str] = None, stt_metadata: Op
     # 3. Use Hint / STT Metadata if provided and valid
     if hint_lang and hint_lang in SUPPORTED_LANGUAGES and hint_lang != "auto":
         return hint_lang
+
+    # 4. Latin script fallback: if text consists of Latin words without Indic matches
+    if tokens and len(tokens) >= 2:
+        return "en-IN"
 
     return "hi-IN"
 

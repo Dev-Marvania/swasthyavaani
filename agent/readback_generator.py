@@ -45,16 +45,31 @@ class ReadbackGenerator:
             friendly = []
             for f in missing:
                 if f == "weight_kg":
-                    friendly.append("weight (वजन)")
+                    if language.startswith("kn"): friendly.append("ತೂಕ")
+                    elif language.startswith("ta"): friendly.append("எடை")
+                    elif language.startswith("te"): friendly.append("బరువు")
+                    elif language.startswith("mr"): friendly.append("वजन")
+                    elif language.startswith("en"): friendly.append("weight")
+                    else: friendly.append("vajan")
                 elif f == "vaccinations":
-                    friendly.append("vaccination details (टीकाकरण)")
+                    if language.startswith("kn"): friendly.append("ಲಸಿಕೆ")
+                    elif language.startswith("ta"): friendly.append("தடுப்பூசி")
+                    elif language.startswith("te"): friendly.append("టీకా")
+                    elif language.startswith("mr"): friendly.append("लसीकरण")
+                    elif language.startswith("en"): friendly.append("vaccination")
+                    else: friendly.append("tika")
                 elif f == "next_visit_date":
-                    friendly.append("next visit date (अगली जांच तिथि)")
+                    if language.startswith("kn"): friendly.append("ಮುಂದಿನ ಭೇಟಿ")
+                    elif language.startswith("ta"): friendly.append("அடுத்த சந்திப்பு")
+                    elif language.startswith("te"): friendly.append("తదుపరి సందర్శన")
+                    elif language.startswith("mr"): friendly.append("पुढील तारीख")
+                    elif language.startswith("en"): friendly.append("next visit date")
+                    else: friendly.append("agli tareekh")
                 else:
                     friendly.append(f)
             missing_text = ", ".join(friendly)
         else:
-            missing_text = "None (all primary details collected)"
+            missing_text = "None"
 
         record_json = record.model_dump_json(indent=2)
         user_prompt = READBACK_USER_PROMPT.format(
@@ -82,13 +97,16 @@ class ReadbackGenerator:
         Generate a spoken notice informing the worker that a record cannot be saved yet
         because essential details are missing and have not been marked N/A.
         """
-        friendly_map = {
-            "weight_kg": "vajan (weight)",
-            "vaccinations": "tika (vaccination)",
-            "next_visit_date": "agli tareekh (next visit)",
-            "visit_type": "visit type",
-        }
-        missing_text = ", ".join(friendly_map.get(f, f) for f in missing_fields)
+        def _get_field_name(f: str, lang: str) -> str:
+            if f == "weight_kg":
+                return "ತೂಕ" if lang.startswith("kn") else "எடை" if lang.startswith("ta") else "బరువు" if lang.startswith("te") else "वजन" if lang.startswith("mr") else "weight" if lang.startswith("en") else "vajan"
+            if f == "vaccinations":
+                return "ಲಸಿಕೆ" if lang.startswith("kn") else "தடுப்பூசி" if lang.startswith("ta") else "టీకా" if lang.startswith("te") else "लस" if lang.startswith("mr") else "vaccination" if lang.startswith("en") else "tika"
+            if f == "next_visit_date":
+                return "ಮುಂದಿನ ಭೇಟಿ" if lang.startswith("kn") else "அடுத்த சந்திப்பு" if lang.startswith("ta") else "తదుపరి సందర్శన" if lang.startswith("te") else "पुढील तारीख" if lang.startswith("mr") else "next appointment" if lang.startswith("en") else "agli tareekh"
+            return f
+
+        missing_text = ", ".join(_get_field_name(f, language) for f in missing_fields)
 
         try:
             notice = await llm_client.generate_readback(
@@ -118,33 +136,54 @@ class ReadbackGenerator:
         missing_fields: Optional[list[str]] = None,
         language: str = "hi-IN",
     ) -> str:
-        """Conversational fallback if LLM is unavailable."""
+        """Strictly monolingual conversational fallback if LLM is unavailable."""
         name = record.beneficiary_name or record.beneficiary_id
         v_type = record.visit_type.value if hasattr(record.visit_type, "value") else str(record.visit_type)
 
-        details = [f"{name} ka {v_type} visit note darj kiya hai"]
-        if record.weight_kg:
-            details.append(f"vajan {record.weight_kg} kilo")
-        if record.vaccinations_given:
-            if any(v.lower() in ("none", "n/a", "na") for v in record.vaccinations_given):
-                details.append("koi vaccine nahi di gayi")
-            else:
-                details.append(f"{', '.join(record.vaccinations_given)} diya gaya")
-        if record.supplements_given:
-            details.append(f"{', '.join(record.supplements_given)} di gayi")
-
-        text = ", ".join(details) + "."
-
-        if missing_fields and not record.danger_flag:
-            first_missing = missing_fields[0]
-            if first_missing == "weight_kg":
-                text += " Kya vajan liya tha, ya not applicable hai?"
-            elif first_missing == "next_visit_date":
-                text += " Kya agla appointment schedule hua hai?"
-            else:
-                text += f" Kya {first_missing} darj karna hai?"
-        else:
-            text += " Kya yeh details sahi hain?"
+        if language.startswith("kn"):
+            parts = [f"{name} ಅವರ {v_type} ತಪಾಸಣೆ ದಾಖಲಿಸಲಾಗಿದೆ"]
+            if record.weight_kg:
+                parts.append(f"ತೂಕ {record.weight_kg} ಕೆಜಿ")
+            if record.vaccinations_given and not any(v.lower() in ("none", "n/a", "na") for v in record.vaccinations_given):
+                parts.append(f"{', '.join(record.vaccinations_given)} ನೀಡಲಾಗಿದೆ")
+            text = ", ".join(parts) + ". ಈ ಮಾಹಿತಿ ಸರಿಯಾಗಿದೆಯೇ?"
+        elif language.startswith("ta"):
+            parts = [f"{name} அவர்களின் {v_type} பரிசோதனை பதிவு செய்யப்பட்டது"]
+            if record.weight_kg:
+                parts.append(f"எடை {record.weight_kg} கிலோ")
+            if record.vaccinations_given and not any(v.lower() in ("none", "n/a", "na") for v in record.vaccinations_given):
+                parts.append(f"{', '.join(record.vaccinations_given)} செலுத்தப்பட்டது")
+            text = ", ".join(parts) + ". இந்த தகவல் சரியானதா?"
+        elif language.startswith("te"):
+            parts = [f"{name} గారి {v_type} పరీక్ష నమోదు చేయబడింది"]
+            if record.weight_kg:
+                parts.append(f"బరువు {record.weight_kg} కిలోలు")
+            if record.vaccinations_given and not any(v.lower() in ("none", "n/a", "na") for v in record.vaccinations_given):
+                parts.append(f"{', '.join(record.vaccinations_given)} ఇవ్వబడింది")
+            text = ", ".join(parts) + ". ఈ సమాచారం సరైనదేనా?"
+        elif language.startswith("mr"):
+            parts = [f"{name} यांची {v_type} तपासणी नोंदवली आहे"]
+            if record.weight_kg:
+                parts.append(f"वजन {record.weight_kg} किलो")
+            if record.vaccinations_given and not any(v.lower() in ("none", "n/a", "na") for v in record.vaccinations_given):
+                parts.append(f"{', '.join(record.vaccinations_given)} दिली आहे")
+            text = ", ".join(parts) + ". ही माहिती बरोबर आहे का?"
+        elif language.startswith("en"):
+            parts = [f"Recorded {v_type} visit note for {name}"]
+            if record.weight_kg:
+                parts.append(f"weight {record.weight_kg} kg")
+            if record.vaccinations_given and not any(v.lower() in ("none", "n/a", "na") for v in record.vaccinations_given):
+                parts.append(f"vaccines given: {', '.join(record.vaccinations_given)}")
+            text = ", ".join(parts) + ". Is this correct?"
+        else: # Default Hindi / Hinglish
+            parts = [f"{name} ka {v_type} visit note darj kiya hai"]
+            if record.weight_kg:
+                parts.append(f"vajan {record.weight_kg} kilo")
+            if record.vaccinations_given and not any(v.lower() in ("none", "n/a", "na") for v in record.vaccinations_given):
+                parts.append(f"{', '.join(record.vaccinations_given)} diya gaya")
+            if record.supplements_given:
+                parts.append(f"{', '.join(record.supplements_given)} di gayi")
+            text = ", ".join(parts) + ". Kya yeh details sahi hain?"
 
         return text
 

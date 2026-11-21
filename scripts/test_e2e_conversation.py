@@ -42,26 +42,15 @@ def run_e2e_conversation():
     with TestClient(app) as client:
         with client.websocket_connect("/ws/voice?lang=hi-IN") as ws:
 
-            # ── TURN 1: Connect & AI Disclosure ────────────────────────────
-            print_header("TURN 1: Session Initiation & Mandatory AI Disclosure")
+            # ── TURN 1: Connect & Silent Listening Mode ────────────────────
+            print_header("TURN 1: Silent Connection & Auto-Detection Ready")
 
             m1 = ws.receive_json()
             assert m1["type"] == "session_ready", f"Expected session_ready, got {m1['type']}"
             print_pass(f"session_ready received: session_id={m1['payload']['session_id']}, lang={m1['payload']['language']}")
+            print_pass("Silent listening confirmed: zero unprompted greeting on connection.")
 
-            m2 = ws.receive_json()
-            assert m2["type"] == "agent_speaking", f"Expected agent_speaking, got {m2['type']}"
-            assert m2["payload"]["speaking"] is True
-            greeting_text = m2["payload"]["text"]
-            assert "SwasthyaVaani" in greeting_text, "Greeting must mention SwasthyaVaani"
-            print_pass("First-turn AI disclosure greeting delivered:")
-            print_info("Spoken Greeting", greeting_text)
-
-            # Read greeting end frame
-            m3 = ws.receive_json()
-            assert m3["type"] == "agent_speaking" and not m3["payload"]["speaking"]
-
-            # ── TURN 2: Spoken Field Notes Extraction ──────────────────────
+            # ── TURN 2: Spoken Field Notes Extraction & First-Turn Disclosure ──
             print_header("TURN 2: Spoken Routine ANC Home-Visit Notes")
             spoken_note = "Priya Devi ka ANC checkup kiya hai, second trimester. Weight 55 kg hai. TT-1 injection aur IFA goli de di hai."
             print_info("ASHA Worker Speaks", f'"{spoken_note}"')
@@ -98,6 +87,8 @@ def run_e2e_conversation():
                             break
 
             assert turn2_draft is not None, "Draft record was not generated in Turn 2"
+            assert "SwasthyaVaani" in turn2_readback, f"First spoken response must include AI disclosure prefix, got: '{turn2_readback}'"
+            print_pass("Mandatory first-spoken-turn AI disclosure verified in readback!")
             assert turn2_draft.get("beneficiary_id") == "SYN-ASHA-001", f"Expected SYN-ASHA-001, got {turn2_draft.get('beneficiary_id')}"
             assert turn2_draft.get("visit_type") == "ANC", f"Expected ANC, got {turn2_draft.get('visit_type')}"
             assert float(turn2_draft.get("weight_kg", 0)) == 55.0, f"Expected 55.0 kg, got {turn2_draft.get('weight_kg')}"

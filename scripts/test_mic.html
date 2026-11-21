@@ -298,12 +298,14 @@
       };
 
       ws.onclose = () => {
+        isAgentSpeaking = false;
         statusBadge.innerText = "Disconnected";
         statusBadge.className = "status-badge";
         log("WebSocket disconnected.");
       };
 
       ws.onerror = (err) => {
+        isAgentSpeaking = false;
         log(`WebSocket error: ${err}`);
       };
     }
@@ -437,6 +439,13 @@
           stopAudioPlayback();
           log("Barge-in acknowledged: playback flushed.");
           break;
+
+        case "error":
+          isAgentSpeaking = false;
+          statusBadge.innerText = `Error: ${p.code || 'unknown'}`;
+          statusBadge.className = "status-badge";
+          log(`⚠️ Server Error [${p.code}]: ${p.message}`);
+          break;
       }
     }
 
@@ -505,7 +514,6 @@
 
         audioProcessor.onaudioprocess = (e) => {
           if (!isRecording && !isPttActive) return;
-          if (isAgentSpeaking && !isPttActive) return; // Prevent laptop speaker echo from polluting STT
 
           const inputFloat32 = e.inputBuffer.getChannelData(0);
 
@@ -517,6 +525,27 @@
           const rms = Math.sqrt(sumSquares / inputFloat32.length);
           const levelPercent = Math.min(100, Math.round(rms * 400));
           vuFill.style.width = `${levelPercent}%`;
+
+          // Instant Client-Side Barge-In Detection (<50ms cutoff)
+          // When the ASHA worker starts speaking while agent is speaking:
+          if (isAgentSpeaking && rms > 0.035) {
+            stopAudioPlayback();
+            isAgentSpeaking = false;
+            statusBadge.innerText = "Listening (Barge-In)";
+            statusBadge.className = "status-badge status-listening";
+            log(`Barge-in triggered by voice activity (RMS: ${rms.toFixed(3)})`);
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: "barge_in",
+                timestamp: Date.now(),
+                payload: { reason: "client_vad" }
+              }));
+            }
+          }
+
+          // If agent is still actively speaking and user hasn't barged in, suppress mic streaming
+          // to prevent laptop speaker echo feedback from polluting STT
+          if (isAgentSpeaking && !isPttActive) return;
 
           // Downsample to 16,000 Hz
           const resampledFloat32 = downsampleBuffer(inputFloat32, nativeSampleRate, 16000);
@@ -689,6 +718,11 @@
 
     // ── Quick Test Scenario Helper ──────────────────────────────────
     function sendQuickText(text) {
+      if (!playContext) {
+        initAudioPlayback();
+      } else if (playContext.state === "suspended") {
+        playContext.resume();
+      }
       if (ws && ws.readyState === WebSocket.OPEN) {
         log(`Sending turn: "${text}"`);
         ws.send(JSON.stringify({

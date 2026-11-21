@@ -75,24 +75,61 @@ async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
     session_asked_fields: set[str] = set()
     lock = asyncio.Lock()
 
+    # Vapi / Retell - style debounced endpointing state
+    turn_chunks: list[str] = []
+    latest_partial: str = ""
+    endpoint_timer_task: Optional[asyncio.Task] = None
+    ai_disclosure_delivered = False
+    ENDPOINTING_DELAY_SEC = 1.3
+
+    async def _schedule_debounced_turn(detected_lang: str):
+        """Waits for sustained silence before finalizing turn and triggering processing."""
+        nonlocal endpoint_timer_task, latest_partial
+        try:
+            await asyncio.sleep(ENDPOINTING_DELAY_SEC)
+            if not turn_chunks and latest_partial.strip():
+                turn_chunks.append(latest_partial.strip())
+            full_text = " ".join(turn_chunks).strip()
+            turn_chunks.clear()
+            latest_partial = ""
+            if full_text:
+                await process_text_turn(full_text, detected_lang or language)
+        except asyncio.CancelledError:
+            pass
+
     # ── Initialize Voice Pipeline ──────────────────────────────────────────
 
     async def on_stt_transcript(text: str, is_final: bool, detected_lang: str):
-        """Callback from Gnani Prisma STT."""
-        nonlocal current_record, language
+        """Callback from Gnani Prisma STT with debounced silence endpointing."""
+        nonlocal current_record, language, endpoint_timer_task, latest_partial
         try:
             if not is_final:
+                latest_partial = text.strip()
                 await websocket.send_text(
                     _ws_event("transcript_partial", {"text": text, "language": detected_lang})
                 )
+                # Reschedule debounce timer on partials so sustained pause without explicit is_final triggers turn
+                if endpoint_timer_task and not endpoint_timer_task.done():
+                    endpoint_timer_task.cancel()
+                endpoint_timer_task = asyncio.create_task(
+                    _schedule_debounced_turn(detected_lang or language)
+                )
             else:
+                latest_partial = ""
                 await websocket.send_text(
                     _ws_event("transcript_final", {"text": text, "language": detected_lang})
                 )
-                # Process the finalized speech turn
-                asyncio.create_task(process_text_turn(text, detected_lang or language))
-        except Exception as err:
-            logger.error("Error in on_stt_transcript callback: %s", err)
+                if text.strip():
+                    turn_chunks.append(text.strip())
+
+                # Debounce endpointing: wait 1.3s of sustained silence before processing
+                if endpoint_timer_task and not endpoint_timer_task.done():
+                    endpoint_timer_task.cancel()
+                endpoint_timer_task = asyncio.create_task(
+                    _schedule_debounced_turn(detected_lang or language)
+                )
+        except Exception as e:
+            logger.error("Error in on_stt_transcript callback: %s", e)
 
     pipeline = SwasthyaVaaniPipeline(
         on_transcript=on_stt_transcript,
@@ -104,7 +141,7 @@ async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
     except Exception as e:
         logger.warning("Gnani STT connection failed on init (offline/sandbox mode): %s", e)
 
-    # ── 1. Send session_ready (Contract) ───────────────────────────────────
+    # ── 1. Send session_ready (Contract) — Start in Silent Listening Mode ────
 
     await websocket.send_text(
         _ws_event(
@@ -117,42 +154,13 @@ async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
         )
     )
 
-    # ── 2. Mandatory First-Turn AI Disclosure (Compliance Rule #1) ──────────
-
-    languages = lang_config.get("languages", {})
-    greeting = ""
-    if auto_detect_enabled:
-        greeting = "Namaste! Main SwasthyaVaani AI sahayak hoon. Aap kisi bhi bhasha mein bol sakti hain, main notes darj kar dungi."
-    elif language in languages:
-        greeting = languages[language].get("ai_disclosure_greeting", "")
-
-    if greeting:
-        await websocket.send_text(
-            _ws_event(
-                "agent_speaking",
-                {"speaking": True, "text": greeting},
-            )
-        )
-
-        # Synthesize and stream greeting audio if connected
-        try:
-            async for pcm_chunk in pipeline.stream_speech(greeting):
-                await websocket.send_bytes(pcm_chunk)
-        except Exception as e:
-            logger.debug("Greeting speech streaming skipped or failed: %s", e)
-        finally:
-            await websocket.send_text(
-                _ws_event(
-                    "agent_speaking",
-                    {"speaking": False, "text": ""},
-                )
-            )
+    # Zero unprompted greetings on connection — wait for worker to speak first!
 
     # ── Helper: Process Text Turn (STT Final or Debug Turn) ────────────────
 
     async def process_text_turn(text: str, active_lang: str):
         """Runs danger detection, LLM extraction/correction, readback, and audio streaming."""
-        nonlocal current_record, current_missing_fields, language, session_na_fields, session_asked_fields
+        nonlocal current_record, current_missing_fields, language, session_na_fields, session_asked_fields, ai_disclosure_delivered
         async with lock:
             # 1. Save transcript encrypted for DPDP
             try:
@@ -280,7 +288,10 @@ async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
                 if detected_lang and detected_lang != language:
                     logger.info("Language auto-detected: %s (%s)", detected_lang, get_language_label(detected_lang))
                     language = detected_lang
-                    await pipeline.change_language(detected_lang)
+                    try:
+                        await pipeline.change_language(detected_lang)
+                    except Exception as e:
+                        logger.warning("Failed to change STT language to %s: %s", detected_lang, e)
                     await websocket.send_text(
                         _ws_event(
                             "language_detected",
@@ -294,7 +305,7 @@ async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
                 if record:
                     # Preserve existing patient context if follow-up turn in same session
                     if current_record:
-                        if not record.beneficiary_name or record.beneficiary_name == "Priya Devi":
+                        if not record.beneficiary_name or record.beneficiary_id == "SYN-ASHA-999":
                             record.beneficiary_id = current_record.beneficiary_id
                             record.beneficiary_name = current_record.beneficiary_name
                         if current_record.weight_kg and not any(kw in lower for kw in ("weight", "kilo", "kg")):
@@ -370,6 +381,24 @@ async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
                     language,
                     missing_fields=fields_to_nudge,
                 )
+
+                # Compliance Rule #1: First spoken turn discloses AI assistant in active language
+                if not ai_disclosure_delivered:
+                    ai_disclosure_delivered = True
+                    if language.startswith("kn"):
+                        disclosure_prefix = "ನಮಸ್ಕಾರ, ನಾನು ಸ್ವಾಸ್ಥ್ಯವಾಣಿ AI ಸಹಾಯಕ. "
+                    elif language.startswith("ta"):
+                        disclosure_prefix = "வணக்கம், நான் ஸ்வஸ்த்யவாணி AI உதவியாளர். "
+                    elif language.startswith("te"):
+                        disclosure_prefix = "నమస్కారం, నేను స్వాస్థ్యవాణి AI సహాయకుడిని. "
+                    elif language.startswith("mr"):
+                        disclosure_prefix = "नमस्कार, मी स्वास्थ्यवाणी AI सहाय्यक आहे. "
+                    elif language.startswith("en"):
+                        disclosure_prefix = "Hello, I am SwasthyaVaani AI assistant. "
+                    else:
+                        disclosure_prefix = "Namaste, main SwasthyaVaani AI sahayak hoon. "
+                    readback_text = disclosure_prefix + readback_text
+
                 await websocket.send_text(_ws_event("agent_speaking", {"speaking": True, "text": readback_text}))
                 try:
                     async for chunk in pipeline.stream_speech(readback_text):
@@ -412,7 +441,10 @@ async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
 
                 elif event_type == "language_change":
                     language = payload.get("language", language)
-                    await pipeline.change_language(language)
+                    try:
+                        await pipeline.change_language(language)
+                    except Exception as e:
+                        logger.warning("Failed to change STT language to %s: %s", language, e)
                     await websocket.send_text(
                         _ws_event(
                             "session_ready",
@@ -425,18 +457,38 @@ async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
                     )
 
                 elif event_type == "barge_in":
-                    # Instant cancel of active TTS audio
+                    # Instant cancel of active TTS audio and reset pending endpointing timer
+                    if endpoint_timer_task and not endpoint_timer_task.done():
+                        endpoint_timer_task.cancel()
+                    turn_chunks.clear()
+                    latest_partial = ""
                     pipeline.handle_barge_in()
                     await websocket.send_text(_ws_event("barge_in_ack"))
 
                 elif event_type == "ptt_state":
                     # Push-to-Talk button toggle
-                    pipeline.set_ptt_state(payload.get("active", False))
+                    active = payload.get("active", False)
+                    pipeline.set_ptt_state(active)
+                    if not active:
+                        # On PTT release, trigger turn finalization if buffered speech or transcript exists
+                        if endpoint_timer_task and not endpoint_timer_task.done():
+                            endpoint_timer_task.cancel()
+                        if not turn_chunks and latest_partial.strip():
+                            turn_chunks.append(latest_partial.strip())
+                        full_text = " ".join(turn_chunks).strip()
+                        turn_chunks.clear()
+                        latest_partial = ""
+                        if full_text:
+                            await process_text_turn(full_text, language)
 
                 elif event_type == "text_turn_debug":
                     # Debug text input (simulates speech for testing)
                     text = payload.get("text", "")
                     if text:
+                        if endpoint_timer_task and not endpoint_timer_task.done():
+                            endpoint_timer_task.cancel()
+                        turn_chunks.clear()
+                        latest_partial = ""
                         await websocket.send_text(
                             _ws_event("transcript_final", {"text": text, "language": language})
                         )
