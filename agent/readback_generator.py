@@ -21,21 +21,45 @@ class ReadbackGenerator:
     or correct while walking between houses.
     """
 
-    async def generate(self, record: ASHAVisitRecord, language: str) -> str:
+    async def generate(
+        self,
+        record: ASHAVisitRecord,
+        language: str = "hi-IN",
+        missing_fields: Optional[list[str]] = None,
+    ) -> str:
         """
-        Generate a brief spoken read-back of the visit record.
+        Generate a brief spoken read-back of the visit record, including prompts
+        for any missing essential fields.
 
         Args:
             record: The extracted visit record to read back.
             language: BCP-47 language code (e.g., "hi-IN").
+            missing_fields: Optional list of field names that were not collected.
 
         Returns:
             A short spoken confirmation string in the specified language.
         """
+        missing = missing_fields or []
+        if missing:
+            friendly = []
+            for f in missing:
+                if f == "weight_kg":
+                    friendly.append("weight (वजन)")
+                elif f == "vaccinations":
+                    friendly.append("vaccination details (टीकाकरण)")
+                elif f == "next_visit_date":
+                    friendly.append("next visit date (अगली जांच तिथि)")
+                else:
+                    friendly.append(f)
+            missing_text = ", ".join(friendly)
+        else:
+            missing_text = "None (all primary details collected)"
+
         record_json = record.model_dump_json(indent=2)
         user_prompt = READBACK_USER_PROMPT.format(
             language=language,
             record_json=record_json,
+            missing_fields_text=missing_text,
         )
         try:
             readback = await llm_client.generate_readback(
@@ -45,10 +69,14 @@ class ReadbackGenerator:
             return readback.strip().strip('"')
         except Exception as e:
             logger.error("Readback generation failed: %s", e)
-            # Fallback: basic English readback
-            return self._fallback_readback(record)
+            # Fallback: basic readback
+            return self._fallback_readback(record, missing)
 
-    def _fallback_readback(self, record: ASHAVisitRecord) -> str:
+    def _fallback_readback(
+        self,
+        record: ASHAVisitRecord,
+        missing_fields: Optional[list[str]] = None,
+    ) -> str:
         """Simple English fallback if LLM is unavailable."""
         parts = [f"Visit for {record.beneficiary_id}"]
         if record.beneficiary_name:
@@ -60,6 +88,8 @@ class ReadbackGenerator:
             parts.append(f"Vaccines given: {', '.join(record.vaccinations_given)}")
         if record.danger_flag:
             parts.append("DANGER SIGN DETECTED — refer to PHC immediately")
+        if missing_fields:
+            parts.append(f"Note: {', '.join(missing_fields)} were not collected, please collect them")
         return ". ".join(parts) + ". Please confirm."
 
 

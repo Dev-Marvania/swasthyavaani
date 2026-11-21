@@ -15,6 +15,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from agent.danger_detector import danger_detector
+from agent.language_detector import detect_language, get_language_label
 from agent.readback_generator import readback_generator
 from agent.visit_extractor import visit_extractor
 from backend.db import db
@@ -52,9 +53,10 @@ def _load_language_config() -> dict:
 
 
 @router.websocket("/ws/voice")
-async def voice_websocket(websocket: WebSocket, lang: str = "hi-IN"):
+async def voice_websocket(websocket: WebSocket, lang: str = "auto"):
     """
     Main real-time voice streaming WebSocket.
+    Supports automatic language detection and missing field spoken prompts.
 
     Handles:
     - Binary frames: 16 kHz 16-bit mono PCM chunks in both directions.
@@ -64,9 +66,11 @@ async def voice_websocket(websocket: WebSocket, lang: str = "hi-IN"):
     await websocket.accept()
 
     session_id = f"SES-{uuid.uuid4().hex[:12].upper()}"
-    language = lang
+    auto_detect_enabled = (lang == "auto")
+    language = "hi-IN" if auto_detect_enabled else lang
     lang_config = _load_language_config()
     current_record: Optional[ASHAVisitRecord] = None
+    current_missing_fields: list[str] = []
     lock = asyncio.Lock()
 
     # ── Initialize Voice Pipeline ──────────────────────────────────────────
@@ -105,7 +109,7 @@ async def voice_websocket(websocket: WebSocket, lang: str = "hi-IN"):
             "session_ready",
             {
                 "session_id": session_id,
-                "language": language,
+                "language": "auto" if auto_detect_enabled else language,
                 "audio_sample_rate": 16000,
             },
         )
@@ -115,7 +119,9 @@ async def voice_websocket(websocket: WebSocket, lang: str = "hi-IN"):
 
     languages = lang_config.get("languages", {})
     greeting = ""
-    if language in languages:
+    if auto_detect_enabled:
+        greeting = "Namaste! Main SwasthyaVaani AI sahayak hoon. Aap kisi bhi bhasha mein bol sakti hain, main notes darj kar dungi."
+    elif language in languages:
         greeting = languages[language].get("ai_disclosure_greeting", "")
 
     if greeting:
@@ -144,7 +150,7 @@ async def voice_websocket(websocket: WebSocket, lang: str = "hi-IN"):
 
     async def process_text_turn(text: str, active_lang: str):
         """Runs danger detection, LLM extraction/correction, readback, and audio streaming."""
-        nonlocal current_record, language
+        nonlocal current_record, current_missing_fields, language
         async with lock:
             # 1. Save transcript encrypted for DPDP
             try:
@@ -180,8 +186,30 @@ async def voice_websocket(websocket: WebSocket, lang: str = "hi-IN"):
                 updated = await visit_extractor.apply_correction(current_record, text)
                 if updated:
                     current_record = updated
+                    current_missing_fields = visit_extractor.detect_missing_fields(current_record)
             else:
-                record, danger_signs, danger_source = await visit_extractor.extract(text, active_lang)
+                ext_res = await visit_extractor.extract(text, active_lang)
+                record, danger_signs, danger_source = ext_res
+                current_missing_fields = getattr(ext_res, "missing_fields", None) or (
+                    visit_extractor.detect_missing_fields(record) if record else []
+                )
+                detected_lang = getattr(ext_res, "detected_language", None) or active_lang
+
+                # Auto-detect language transition
+                if detected_lang and detected_lang != language:
+                    logger.info("Language auto-detected: %s (%s)", detected_lang, get_language_label(detected_lang))
+                    language = detected_lang
+                    await pipeline.change_language(detected_lang)
+                    await websocket.send_text(
+                        _ws_event(
+                            "language_detected",
+                            {
+                                "language": detected_lang,
+                                "label": get_language_label(detected_lang),
+                            },
+                        )
+                    )
+
                 if record:
                     # Preserve existing patient context if follow-up turn in same session
                     if current_record:
@@ -193,10 +221,11 @@ async def voice_websocket(websocket: WebSocket, lang: str = "hi-IN"):
                         if current_record.vaccinations_given and not record.vaccinations_given:
                             record.vaccinations_given = current_record.vaccinations_given
                     current_record = record
+                    current_missing_fields = visit_extractor.detect_missing_fields(current_record)
 
                     # If danger signs detected, emit danger_alert immediately
                     if current_record.danger_flag and danger_signs:
-                        referral_msg = current_record.referral_action or danger_detector.get_referral_message(active_lang)
+                        referral_msg = current_record.referral_action or danger_detector.get_referral_message(language)
                         await websocket.send_text(
                             _ws_event(
                                 "danger_alert",
@@ -219,13 +248,23 @@ async def voice_websocket(websocket: WebSocket, lang: str = "hi-IN"):
                             await websocket.send_text(_ws_event("agent_speaking", {"speaking": False, "text": ""}))
 
             if current_record:
-                # Emit draft visit record card
+                # Emit draft visit record card including missing_fields list
                 await websocket.send_text(
-                    _ws_event("record_draft", {"record": current_record.model_dump(mode="json")})
+                    _ws_event(
+                        "record_draft",
+                        {
+                            "record": current_record.model_dump(mode="json"),
+                            "missing_fields": current_missing_fields,
+                        },
+                    )
                 )
 
-                # Generate concise 1-2 sentence readback
-                readback_text = await readback_generator.generate(current_record, active_lang)
+                # Generate concise readback including prompts for any missing fields
+                readback_text = await readback_generator.generate(
+                    current_record,
+                    language,
+                    missing_fields=current_missing_fields,
+                )
                 await websocket.send_text(_ws_event("agent_speaking", {"speaking": True, "text": readback_text}))
                 try:
                     async for chunk in pipeline.stream_speech(readback_text):

@@ -31,6 +31,7 @@ Your ONLY job is to extract structured visit record fields from spoken notes.
 - danger_signs_detected: List of danger sign IDs detected
 - referral_action: PHC referral instruction if danger_flag is true
 - notes_summary: Brief summary of the visit notes
+- detected_language: Detected BCP-47 language code (one of hi-IN, kn-IN, ta-IN, te-IN, mr-IN, en-IN)
 
 ## LANGUAGE HANDLING:
 - Accept input in Hindi, Kannada, Tamil, Telugu, Marathi, or English code-mix.
@@ -82,10 +83,16 @@ Return ONLY a JSON array of matching danger sign IDs. Example: ["MAT_BLEEDING"]
 # ── Readback Generation Prompt ────────────────────────────────────────────
 
 READBACK_SYSTEM_PROMPT = """\
-You generate concise spoken confirmations for ASHA health workers.
-Keep it to 1-2 short sentences so she can confirm while walking between houses.
+You generate concise spoken confirmations for Indian ASHA community health workers.
+Keep it to 2-3 short sentences so she can confirm while walking between houses.
 Speak in the specified language with simple words.
-NEVER mention medical advice, only state what was recorded.
+NEVER provide medical diagnosis or treatment advice.
+
+CRITICAL RULE FOR MISSING FIELDS:
+If the prompt indicates that certain essential details were NOT collected (e.g. weight, vaccination status, next visit date), you MUST clearly and politely state in the spoken language that these details were not collected and ask the worker to collect them.
+Example in Hindi: "Record darj kiya gaya hai. Lekin patient ka weight nahi mila hai, kripya weight collect karein."
+Example in English: "Visit record noted. However, patient weight was not collected, please collect it."
+Example in Kannada: "Record daakhalisalaagide. Aadare rogiya weight sangrahisilla, dayavittu weight collect maadi."
 """
 
 READBACK_USER_PROMPT = """\
@@ -93,8 +100,12 @@ Language: {language}
 Visit record:
 {record_json}
 
-Generate a brief spoken read-back of this record for the ASHA worker to confirm.
-Use the language specified. Keep it under 2 sentences.
+Missing fields that were NOT collected:
+{missing_fields_text}
+
+Generate a brief spoken read-back of this record for the ASHA worker.
+If missing fields are listed above, explicitly tell her that these details were not collected and prompt her to collect them.
+Use the language specified. Keep the response under 3 sentences.
 """
 
 # ── Correction Prompt ─────────────────────────────────────────────────────

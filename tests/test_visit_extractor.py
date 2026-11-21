@@ -136,3 +136,44 @@ class TestVisitExtractor:
             assert corrected is not None
             assert corrected.weight_kg == 52.8
             assert corrected.beneficiary_id == "SYN-ASHA-001"  # Unchanged
+
+    def test_detect_missing_fields(self, extractor: VisitExtractor):
+        """Missing clinical fields (weight, vaccinations, next visit date) should be detected."""
+        incomplete_record = ASHAVisitRecord(
+            beneficiary_id="SYN-ASHA-001",
+            visit_type=VisitType.ANC,
+            weight_kg=None,
+            vaccinations_given=[],
+            next_visit_date=None,
+            danger_flag=False,
+            confirmed=False,
+            language=Language.HI,
+        )
+
+        missing = extractor.detect_missing_fields(incomplete_record)
+        assert "weight_kg" in missing
+        assert "vaccinations" in missing
+        assert "next_visit_date" in missing
+
+    @pytest.mark.asyncio
+    async def test_auto_language_in_extraction(self, extractor: VisitExtractor):
+        """Auto language parameter should be resolved automatically by language detector."""
+        kannada_response = dict(MOCK_EXTRACTION_RESPONSE)
+        kannada_response["language"] = "kn-IN"
+
+        with patch(
+            "agent.llm_client.llm_client.extract_visit_record",
+            new_callable=AsyncMock,
+            return_value=kannada_response,
+        ), patch(
+            "agent.llm_client.llm_client.check_danger_signs",
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            ext_res = await extractor.extract(
+                transcript="ಕವಿತಾ ಅವರಿಗೆ ಹೆರಿಗೆ ನಂತರದ ತಪಾಸಣೆ ಮಾಡಿದೆ, ತೂಕ 52 ಕೆಜಿ ಇದೆ.",
+                language="auto",
+            )
+            assert ext_res.detected_language == "kn-IN"
+            assert isinstance(ext_res.missing_fields, list)
+

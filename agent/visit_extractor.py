@@ -11,6 +11,7 @@ import re
 from typing import Any, Optional
 
 from agent.danger_detector import danger_detector
+from agent.language_detector import detect_language
 from agent.llm_client import llm_client
 from agent.prompts import (
     CORRECTION_SYSTEM_PROMPT,
@@ -18,9 +19,34 @@ from agent.prompts import (
     VISIT_EXTRACTION_SYSTEM_PROMPT,
     VISIT_EXTRACTION_USER_PROMPT,
 )
-from backend.models import ASHAVisitRecord
+from backend.models import ASHAVisitRecord, VisitType
 
 logger = logging.getLogger(__name__)
+
+
+class ExtractionResult:
+    """
+    Rich container for extraction output.
+    Maintains 3-tuple iteration compatibility (record, danger_signs, danger_source)
+    while exposing missing_fields and detected_language attributes.
+    """
+
+    def __init__(
+        self,
+        record: Optional[ASHAVisitRecord],
+        danger_signs: list[dict],
+        danger_source: str,
+        missing_fields: Optional[list[str]] = None,
+        detected_language: str = "hi-IN",
+    ) -> None:
+        self.record = record
+        self.danger_signs = danger_signs
+        self.danger_source = danger_source
+        self.missing_fields = missing_fields or []
+        self.detected_language = detected_language
+
+    def __iter__(self):
+        return iter((self.record, self.danger_signs, self.danger_source))
 
 
 class VisitExtractor:
@@ -107,21 +133,48 @@ class VisitExtractor:
         }
         return {k: v for k, v in data.items() if k in allowed_fields}
 
+    def detect_missing_fields(self, record: ASHAVisitRecord) -> list[str]:
+        """
+        Identify essential clinical fields that were not collected in the spoken notes.
+        Returns a list of missing field names.
+        """
+        missing: list[str] = []
+
+        # 1. Weight is essential for ANC, PNC, and Infant HBNC visits
+        if record.weight_kg is None:
+            missing.append("weight_kg")
+
+        # 2. Vaccination status is essential for routine pregnancy and infant visits
+        if not record.vaccinations_given and not record.vaccinations_due:
+            if record.visit_type in (VisitType.ANC, VisitType.PNC, VisitType.HBNC, VisitType.IMMUNISATION):
+                missing.append("vaccinations")
+
+        # 3. Next visit date is essential for ANC/PNC continuity
+        if not record.next_visit_date:
+            if record.visit_type in (VisitType.ANC, VisitType.PNC, VisitType.HBNC):
+                missing.append("next_visit_date")
+
+        return missing
+
     async def extract(
         self,
         transcript: str,
-        language: str,
-    ) -> tuple[Optional[ASHAVisitRecord], list[dict], str]:
+        language: str = "auto",
+    ) -> ExtractionResult:
         """
-        Extract a visit record from the transcript.
+        Extract a visit record from the transcript with automatic language detection
+        and missing field analysis.
         """
+        # Resolve language automatically if "auto" or unspecified
+        resolved_lang = detect_language(transcript, hint_lang=language if language != "auto" else None)
+
         user_prompt = VISIT_EXTRACTION_USER_PROMPT.format(
-            language=language,
+            language=resolved_lang,
             transcript=transcript,
         )
         raw_record = await llm_client.extract_visit_record(
             transcript=transcript,
-            language=language,
+            language=resolved_lang,
             system_prompt=VISIT_EXTRACTION_SYSTEM_PROMPT,
             user_prompt=user_prompt,
         )
@@ -131,10 +184,14 @@ class VisitExtractor:
 
         if not raw_record:
             logger.warning("LLM extraction returned empty result")
-            return None, danger_signs, danger_source
+            return ExtractionResult(None, danger_signs, danger_source, [], resolved_lang)
+
+        # If LLM identified a specific detected_language, refine resolved_lang
+        if raw_record.get("detected_language") in ("hi-IN", "kn-IN", "ta-IN", "te-IN", "mr-IN", "en-IN"):
+            resolved_lang = raw_record["detected_language"]
 
         # Sanitize and merge danger detection
-        sanitized = self._sanitize_record_dict(raw_record, transcript, language)
+        sanitized = self._sanitize_record_dict(raw_record, transcript, resolved_lang)
         if danger_signs:
             sanitized["danger_flag"] = True
             existing_signs = sanitized.get("danger_signs_detected", [])
@@ -143,14 +200,15 @@ class VisitExtractor:
             )
             sanitized["danger_signs_detected"] = all_sign_ids
             if not sanitized.get("referral_action"):
-                sanitized["referral_action"] = danger_detector.get_referral_message(language)
+                sanitized["referral_action"] = danger_detector.get_referral_message(resolved_lang)
 
         try:
             record = ASHAVisitRecord(**sanitized)
-            return record, danger_signs, danger_source
+            missing_fields = self.detect_missing_fields(record)
+            return ExtractionResult(record, danger_signs, danger_source, missing_fields, resolved_lang)
         except Exception as e:
             logger.error("Pydantic validation failed: %s | Sanitized: %s", e, sanitized)
-            return None, danger_signs, danger_source
+            return ExtractionResult(None, danger_signs, danger_source, [], resolved_lang)
 
     async def apply_correction(
         self,

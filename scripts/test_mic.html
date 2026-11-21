@@ -69,6 +69,36 @@
     .subtitles { min-height: 60px; font-size: 1rem; color: #f1f5f9; line-height: 1.5; font-style: italic; background: #090d16; padding: 12px; border-radius: 8px; border: 1px solid var(--border); }
     .partial { color: #38bdf8; }
 
+    .lang-pill {
+      background: #0f172a;
+      border: 1px solid #38bdf8;
+      color: #38bdf8;
+      padding: 7px 14px;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.3s ease;
+    }
+    .lang-pill.lang-detected {
+      background: #064e3b;
+      border-color: #10b981;
+      color: #a7f3d0;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+    }
+    .text-warning {
+      color: #fbbf24;
+      background: #451a03;
+      padding: 2px 8px;
+      border-radius: 4px;
+      border: 1px solid #d97706;
+      font-size: 0.8rem;
+      display: inline-block;
+      font-weight: bold;
+    }
+
     .record-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .field-box { background: #0f172a; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); }
     .field-name { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; }
@@ -96,16 +126,7 @@
     <!-- Controls -->
     <div class="control-panel">
       <div class="row">
-        <div>
-          <label>Language: </label>
-          <select id="langSelect">
-            <option value="hi-IN" selected>हिन्दी (hi-IN)</option>
-            <option value="kn-IN">ಕನ್ನಡ (kn-IN)</option>
-            <option value="ta-IN">தமிழ் (ta-IN)</option>
-            <option value="te-IN">తెలుగు (te-IN)</option>
-            <option value="mr-IN">मराठी (mr-IN)</option>
-          </select>
-        </div>
+        <div id="langBadge" class="lang-pill">🌐 Language: Auto-Detecting...</div>
         <button id="btnMic" class="btn-mic">🎤 Start Microphone</button>
         <button id="btnPtt" class="btn-ptt">🎙️ Hold Space to Talk</button>
         <button id="btnBargeIn" class="btn-barge">🛑 Barge-In</button>
@@ -125,15 +146,16 @@
 
       <!-- Quick Test Scenarios -->
       <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px;">
-        <span style="font-size: 0.75rem; color: var(--text-muted);">Quick-Test Scenarios (Simulate Voice Notes):</span>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">Quick-Test Scenarios (Simulate Spoken Notes across Languages):</span>
         <div class="row">
-          <button class="btn-quick" onclick="sendQuickText('Priya Devi ka ANC visit hai, weight 55 kilo hai, bleeding ho rahi hai.')">🚨 ANC + Bleeding</button>
-          <button class="btn-quick" onclick="sendQuickText('Bacche ko tez bukhar hai aur ulti ho rahi hai.')">🚨 Infant High Fever</button>
+          <button class="btn-quick" onclick="sendQuickText('Priya Devi ka ANC visit hai, TT-1 injection diya.')">⚠️ Missing Weight Note</button>
+          <button class="btn-quick" onclick="sendQuickText('Priya Devi ka ANC visit hai, weight 55 kilo hai, bleeding ho rahi hai.')">🚨 ANC + Bleeding (Hindi)</button>
+          <button class="btn-quick" onclick="sendQuickText('ಕವಿತಾ ಅವರಿಗೆ ಹೆರಿಗೆ ನಂತರದ ತಪಾಸಣೆ ಮಾಡಿದೆ, ತೂಕ 52 ಕೆಜಿ ಇದೆ.')">ಕನ್ನಡ PNC Note (Kannada)</button>
           <button class="btn-quick" onclick="sendQuickText('Nahi, weight 58 kilo tha.')">⚖️ Weight Correction</button>
           <button class="btn-quick" onclick="sendQuickText('Haan theek hai, save karo.')">✅ Confirm & Save</button>
         </div>
         <div class="row" style="margin-top: 4px;">
-          <input type="text" id="customInput" placeholder="Or type a custom spoken phrase to test pipeline..." />
+          <input type="text" id="customInput" placeholder="Or type a custom spoken phrase to test auto-detection..." />
           <button class="btn-quick" style="background: #2563eb; color: #fff;" onclick="sendCustomInput()">Send Text Turn</button>
         </div>
       </div>
@@ -143,7 +165,7 @@
     <div class="card">
       <div class="card-title">
         <span>Live Spoken Subtitles</span>
-        <span id="subLang" style="font-size: 0.75rem; color: var(--text-muted);">Lang: hi-IN</span>
+        <span id="subLang" style="font-size: 0.75rem; color: var(--text-muted);">Lang: auto</span>
       </div>
       <div id="subtitlesBox" class="subtitles">Press 'Start Microphone' or click a Quick-Test scenario...</div>
     </div>
@@ -173,6 +195,10 @@
           <div id="valSupp" class="field-value">—</div>
         </div>
         <div class="field-box">
+          <div class="field-name">Next Visit Date</div>
+          <div id="valNext" class="field-value">—</div>
+        </div>
+        <div class="field-box" style="grid-column: span 2;">
           <div class="field-name">Danger Status</div>
           <div id="valDanger" class="field-value" style="color: #10b981;">Normal</div>
         </div>
@@ -203,7 +229,7 @@
     let activeAudioSources = [];
 
     const statusBadge = document.getElementById("statusBadge");
-    const langSelect = document.getElementById("langSelect");
+    const langBadge = document.getElementById("langBadge");
     const btnMic = document.getElementById("btnMic");
     const btnPtt = document.getElementById("btnPtt");
     const btnBargeIn = document.getElementById("btnBargeIn");
@@ -224,6 +250,7 @@
     const valWeight = document.getElementById("valWeight");
     const valVax = document.getElementById("valVax");
     const valSupp = document.getElementById("valSupp");
+    const valNext = document.getElementById("valNext");
     const valDanger = document.getElementById("valDanger");
 
     function log(msg) {
@@ -235,8 +262,7 @@
     function connectWS() {
       const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
       const host = window.location.host || "localhost:8000";
-      const lang = langSelect.value;
-      const url = `${proto}//${host}/ws/voice?lang=${lang}`;
+      const url = `${proto}//${host}/ws/voice?lang=auto`;
 
       log(`Connecting to ${url}...`);
       statusBadge.innerText = "Connecting...";
@@ -278,6 +304,21 @@
       switch (ev.type) {
         case "session_ready":
           log(`Session ready: ${p.session_id}`);
+          subLang.innerText = `Lang: ${p.language || 'auto'}`;
+          if (p.language && p.language !== "auto") {
+            langBadge.innerText = `🌐 Language: ${p.language} [Auto]`;
+            langBadge.classList.add("lang-detected");
+          } else {
+            langBadge.innerText = "🌐 Language: Auto-Detecting...";
+            langBadge.classList.remove("lang-detected");
+          }
+          break;
+
+        case "language_detected":
+          const langDisplay = p.label || p.language || "Unknown";
+          log(`🌐 Auto-detected language: ${langDisplay} (${p.confidence || 'confident'})`);
+          langBadge.innerText = `🌐 Language: ${langDisplay} [Auto-Detected]`;
+          langBadge.classList.add("lang-detected");
           subLang.innerText = `Lang: ${p.language}`;
           break;
 
@@ -310,11 +351,43 @@
         case "record_draft":
         case "record_confirmed":
           const r = p.record || {};
+          const missing = p.missing_fields || [];
+
           valBen.innerText = r.beneficiary_name ? `${r.beneficiary_name} (${r.beneficiary_id})` : (r.beneficiary_id || "—");
-          valType.innerText = r.visit_type || "—";
-          valWeight.innerText = r.weight_kg ? `${r.weight_kg} kg` : "—";
-          valVax.innerText = (r.vaccinations_given && r.vaccinations_given.length) ? r.vaccinations_given.join(", ") : "—";
+
+          if (r.visit_type) {
+            valType.innerText = r.visit_type;
+          } else if (missing.includes("visit_type")) {
+            valType.innerHTML = '<span class="text-warning">⚠️ Not Collected</span>';
+          } else {
+            valType.innerText = "—";
+          }
+
+          if (r.weight_kg !== null && r.weight_kg !== undefined) {
+            valWeight.innerText = `${r.weight_kg} kg`;
+          } else if (missing.includes("weight_kg")) {
+            valWeight.innerHTML = '<span class="text-warning">⚠️ Not Collected</span>';
+          } else {
+            valWeight.innerText = "—";
+          }
+
+          if (r.vaccinations_given && r.vaccinations_given.length > 0) {
+            valVax.innerText = r.vaccinations_given.join(", ");
+          } else if (missing.includes("vaccinations")) {
+            valVax.innerHTML = '<span class="text-warning">⚠️ Not Collected</span>';
+          } else {
+            valVax.innerText = "—";
+          }
+
           valSupp.innerText = (r.supplements_given && r.supplements_given.length) ? r.supplements_given.join(", ") : "—";
+
+          if (r.next_visit_date) {
+            valNext.innerText = r.next_visit_date;
+          } else if (missing.includes("next_visit_date")) {
+            valNext.innerHTML = '<span class="text-warning">⚠️ Not Collected</span>';
+          } else {
+            valNext.innerText = "—";
+          }
 
           if (r.danger_flag) {
             valDanger.innerText = "🚨 DANGER DETECTED";
@@ -323,6 +396,11 @@
             valDanger.innerText = "Normal";
             valDanger.style.color = "#10b981";
           }
+
+          if (ev.type === "record_confirmed") {
+            alert(`✅ Visit Record Confirmed & Saved into Encrypted SQLite! Saved ID: ${p.saved_id}`);
+          }
+          break;
 
           if (ev.type === "record_confirmed") {
             alert(`✅ Visit Record Confirmed & Saved into Encrypted SQLite! Saved ID: ${p.saved_id}`);
@@ -610,17 +688,6 @@
         sendCustomInput();
       }
     });
-
-    // ── Language Selector ───────────────────────────────────────────
-    langSelect.onchange = () => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          type: "language_change",
-          timestamp: Date.now(),
-          payload: { language: langSelect.value }
-        }));
-      }
-    };
 
     // Start WebSocket on load
     window.onload = connectWS;
