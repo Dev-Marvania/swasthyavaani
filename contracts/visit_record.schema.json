@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASHAVisitRecord",
+  "type": "object",
+  "required": [
+    "beneficiary_id",
+    "visit_type",
+    "danger_flag",
+    "confirmed",
+    "language"
+  ],
+  "properties": {
+    "record_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "beneficiary_id": {
+      "type": "string",
+      "pattern": "^SYN-ASHA-[0-9]{3,}$"
+    },
+    "beneficiary_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "visit_type": {
+      "type": "string",
+      "enum": [
+        "ANC",
+        "PNC",
+        "HBNC",
+        "Immunisation",
+        "General"
+      ]
+    },
+    "weight_kg": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0.5,
+      "maximum": 150.0
+    },
+    "vaccinations_due": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "vaccinations_given": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "supplements_given": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "next_visit_date": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "follow_up_tasks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "danger_flag": {
+      "type": "boolean",
+      "default": false
+    },
+    "danger_signs_detected": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "referral_action": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "confirmed": {
+      "type": "boolean",
+      "default": false
+    },
+    "language": {
+      "type": "string",
+      "enum": [
+        "hi-IN",
+        "kn-IN",
+        "ta-IN",
+        "te-IN",
+        "mr-IN",
+        "en-IN"
+      ],
+      "default": "hi-IN"
+    },
+    "notes_summary": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

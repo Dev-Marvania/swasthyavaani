@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SwasthyaVaani — Live Microphone Tester</title>
+  <style>
+    :root {
+      --primary: #10b981;
+      --primary-hover: #059669;
+      --danger: #ef4444;
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); padding: 20px; display: flex; justify-content: center; }
+    .container { max-width: 740px; width: 100%; display: flex; flex-direction: column; gap: 16px; }
+
+    header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+    h1 { font-size: 1.4rem; color: #38bdf8; }
+    .status-badge { padding: 4px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: bold; background: #475569; color: #fff; transition: background 0.3s; }
+    .status-online { background: #16a34a; }
+    .status-listening { background: #0284c7; }
+    .status-speaking { background: #eab308; color: #000; }
+
+    .control-panel { background: var(--card-bg); padding: 16px; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    
+    label { font-size: 0.85rem; color: var(--text-muted); }
+    select, button, input { padding: 9px 14px; border-radius: 8px; border: none; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    select { background: #0f172a; color: #fff; border: 1px solid var(--border); }
+    input[type="text"] { background: #0f172a; color: #fff; border: 1px solid var(--border); flex: 1; cursor: text; }
+
+    .btn-mic { background: var(--primary); color: white; display: flex; align-items: center; gap: 6px; }
+    .btn-mic:hover { background: var(--primary-hover); }
+    .btn-mic.active { background: #e11d48; animation: pulse 1.5s infinite; }
+    .btn-ptt { background: #6366f1; color: white; }
+    .btn-ptt:hover { background: #4f46e5; }
+    .btn-ptt.active { background: #818cf8; }
+    .btn-barge { background: #f59e0b; color: #000; }
+    .btn-barge:hover { background: #d97706; }
+    .btn-confirm { background: #2563eb; color: #fff; }
+    .btn-quick { background: #334155; color: #cbd5e1; font-size: 0.8rem; padding: 6px 10px; font-weight: 500; }
+    .btn-quick:hover { background: #475569; color: #fff; }
+
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+
+    /* VU Audio Meter */
+    .vu-container { display: flex; flex-direction: column; gap: 4px; background: #090d16; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); }
+    .vu-header { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); }
+    .vu-bar-bg { width: 100%; height: 12px; background: #1e293b; border-radius: 6px; overflow: hidden; position: relative; }
+    .vu-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #10b981 60%, #eab308 85%, #ef4444 100%); transition: width 0.05s ease-out; }
+
+    .danger-banner {
+      display: none; background: #7f1d1d; border: 2px solid #ef4444; border-radius: 10px;
+      padding: 14px; animation: flash 1s infinite alternate;
+    }
+    .danger-banner.show { display: block; }
+    .danger-title { color: #fca5a5; font-size: 1.05rem; font-weight: bold; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+    .danger-desc { color: #fee2e2; font-size: 0.9rem; line-height: 1.4; }
+
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .card-title { font-size: 0.95rem; color: #38bdf8; margin-bottom: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; display: flex; justify-content: space-between; }
+
+    .subtitles { min-height: 60px; font-size: 1rem; color: #f1f5f9; line-height: 1.5; font-style: italic; background: #090d16; padding: 12px; border-radius: 8px; border: 1px solid var(--border); }
+    .partial { color: #38bdf8; }
+
+    .record-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .field-box { background: #0f172a; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); }
+    .field-name { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; }
+    .field-value { font-size: 0.95rem; font-weight: 600; margin-top: 2px; }
+
+    .log-box { font-family: monospace; font-size: 0.75rem; background: #090d16; padding: 10px; border-radius: 8px; max-height: 140px; overflow-y: auto; color: #38bdf8; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>🎙️ SwasthyaVaani Live Field Register</h1>
+        <p style="font-size: 0.8rem; color: var(--text-muted);">Gnani Prisma v3.0 STT • Timbre v3.0 TTS • Gemini 3.1 Flash-Lite</p>
+      </div>
+      <div id="statusBadge" class="status-badge">Connecting...</div>
+    </header>
+
+    <!-- Danger Referral Alert Banner -->
+    <div id="dangerBanner" class="danger-banner">
+      <div class="danger-title">🚨 URGENT PHC REFERRAL REQUIRED</div>
+      <div id="dangerMessage" class="danger-desc">DANGER SIGN DETECTED</div>
+    </div>
+
+    <!-- Controls -->
+    <div class="control-panel">
+      <div class="row">
+        <div>
+          <label>Language: </label>
+          <select id="langSelect">
+            <option value="hi-IN" selected>हिन्दी (hi-IN)</option>
+            <option value="kn-IN">ಕನ್ನಡ (kn-IN)</option>
+            <option value="ta-IN">தமிழ் (ta-IN)</option>
+            <option value="te-IN">తెలుగు (te-IN)</option>
+            <option value="mr-IN">मराठी (mr-IN)</option>
+          </select>
+        </div>
+        <button id="btnMic" class="btn-mic">🎤 Start Microphone</button>
+        <button id="btnPtt" class="btn-ptt">🎙️ Hold Space to Talk</button>
+        <button id="btnBargeIn" class="btn-barge">🛑 Barge-In</button>
+        <button id="btnConfirm" class="btn-confirm">✅ Confirm Visit</button>
+      </div>
+
+      <!-- Live VU Meter -->
+      <div class="vu-container">
+        <div class="vu-header">
+          <span id="vuStatus">Mic: Inactive</span>
+          <span id="vuStats">Rate: — | Sent: 0 KB</span>
+        </div>
+        <div class="vu-bar-bg">
+          <div id="vuFill" class="vu-bar-fill"></div>
+        </div>
+      </div>
+
+      <!-- Quick Test Scenarios -->
+      <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px;">
+        <span style="font-size: 0.75rem; color: var(--text-muted);">Quick-Test Scenarios (Simulate Voice Notes):</span>
+        <div class="row">
+          <button class="btn-quick" onclick="sendQuickText('Priya Devi ka ANC visit hai, weight 55 kilo hai, bleeding ho rahi hai.')">🚨 ANC + Bleeding</button>
+          <button class="btn-quick" onclick="sendQuickText('Bacche ko tez bukhar hai aur ulti ho rahi hai.')">🚨 Infant High Fever</button>
+          <button class="btn-quick" onclick="sendQuickText('Nahi, weight 58 kilo tha.')">⚖️ Weight Correction</button>
+          <button class="btn-quick" onclick="sendQuickText('Haan theek hai, save karo.')">✅ Confirm & Save</button>
+        </div>
+        <div class="row" style="margin-top: 4px;">
+          <input type="text" id="customInput" placeholder="Or type a custom spoken phrase to test pipeline..." />
+          <button class="btn-quick" style="background: #2563eb; color: #fff;" onclick="sendCustomInput()">Send Text Turn</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Speech Transcript -->
+    <div class="card">
+      <div class="card-title">
+        <span>Live Spoken Subtitles</span>
+        <span id="subLang" style="font-size: 0.75rem; color: var(--text-muted);">Lang: hi-IN</span>
+      </div>
+      <div id="subtitlesBox" class="subtitles">Press 'Start Microphone' or click a Quick-Test scenario...</div>
+    </div>
+
+    <!-- Structured Form Card -->
+    <div class="card">
+      <div class="card-title">Structured ASHA Visit Record</div>
+      <div class="record-grid">
+        <div class="field-box">
+          <div class="field-name">Beneficiary</div>
+          <div id="valBen" class="field-value">—</div>
+        </div>
+        <div class="field-box">
+          <div class="field-name">Visit Type</div>
+          <div id="valType" class="field-value">—</div>
+        </div>
+        <div class="field-box">
+          <div class="field-name">Weight (kg)</div>
+          <div id="valWeight" class="field-value">—</div>
+        </div>
+        <div class="field-box">
+          <div class="field-name">Vaccinations Given</div>
+          <div id="valVax" class="field-value">—</div>
+        </div>
+        <div class="field-box">
+          <div class="field-name">Supplements</div>
+          <div id="valSupp" class="field-value">—</div>
+        </div>
+        <div class="field-box">
+          <div class="field-name">Danger Status</div>
+          <div id="valDanger" class="field-value" style="color: #10b981;">Normal</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Event Log -->
+    <div class="card">
+      <div class="card-title">WebSocket Events</div>
+      <div id="logBox" class="log-box"></div>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let micStream = null;
+    let audioContext = null;
+    let audioProcessor = null;
+    let isRecording = false;
+    let isPttActive = false;
+    let isAgentSpeaking = false;
+    let totalBytesSent = 0;
+    let chunkBuffer = [];
+
+    // Web Audio Player for 16 kHz PCM streaming chunks from Gnani Timbre
+    let playContext = null;
+    let nextPlayTime = 0;
+    let activeAudioSources = [];
+
+    const statusBadge = document.getElementById("statusBadge");
+    const langSelect = document.getElementById("langSelect");
+    const btnMic = document.getElementById("btnMic");
+    const btnPtt = document.getElementById("btnPtt");
+    const btnBargeIn = document.getElementById("btnBargeIn");
+    const btnConfirm = document.getElementById("btnConfirm");
+    const subtitlesBox = document.getElementById("subtitlesBox");
+    const subLang = document.getElementById("subLang");
+    const dangerBanner = document.getElementById("dangerBanner");
+    const dangerMessage = document.getElementById("dangerMessage");
+    const logBox = document.getElementById("logBox");
+    const vuFill = document.getElementById("vuFill");
+    const vuStatus = document.getElementById("vuStatus");
+    const vuStats = document.getElementById("vuStats");
+    const customInput = document.getElementById("customInput");
+
+    // Form fields
+    const valBen = document.getElementById("valBen");
+    const valType = document.getElementById("valType");
+    const valWeight = document.getElementById("valWeight");
+    const valVax = document.getElementById("valVax");
+    const valSupp = document.getElementById("valSupp");
+    const valDanger = document.getElementById("valDanger");
+
+    function log(msg) {
+      const time = new Date().toLocaleTimeString();
+      logBox.innerHTML = `[${time}] ${msg}<br>` + logBox.innerHTML;
+    }
+
+    // ── Connect WebSocket ──────────────────────────────────────────
+    function connectWS() {
+      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const host = window.location.host || "localhost:8000";
+      const lang = langSelect.value;
+      const url = `${proto}//${host}/ws/voice?lang=${lang}`;
+
+      log(`Connecting to ${url}...`);
+      statusBadge.innerText = "Connecting...";
+      statusBadge.className = "status-badge";
+
+      ws = new WebSocket(url);
+      ws.binaryType = "arraybuffer";
+
+      ws.onopen = () => {
+        statusBadge.innerText = "Online";
+        statusBadge.className = "status-badge status-online";
+        log("WebSocket connected to SwasthyaVaani server.");
+      };
+
+      ws.onmessage = (event) => {
+        if (typeof event.data === "string") {
+          handleJsonEvent(JSON.parse(event.data));
+        } else if (event.data instanceof ArrayBuffer) {
+          playPcmChunk(event.data);
+        }
+      };
+
+      ws.onclose = () => {
+        statusBadge.innerText = "Disconnected";
+        statusBadge.className = "status-badge";
+        log("WebSocket disconnected.");
+      };
+
+      ws.onerror = (err) => {
+        log(`WebSocket error: ${err}`);
+      };
+    }
+
+    // ── Handle JSON Protocol Frames ────────────────────────────────
+    function handleJsonEvent(ev) {
+      log(`Event: ${ev.type}`);
+      const p = ev.payload || {};
+
+      switch (ev.type) {
+        case "session_ready":
+          log(`Session ready: ${p.session_id}`);
+          subLang.innerText = `Lang: ${p.language}`;
+          break;
+
+        case "agent_speaking":
+          isAgentSpeaking = Boolean(p.speaking);
+          if (p.speaking) {
+            statusBadge.innerText = "Agent Speaking (Mic Muted)";
+            statusBadge.className = "status-badge status-speaking";
+          } else {
+            statusBadge.innerText = isRecording ? "Listening" : "Online";
+            statusBadge.className = isRecording ? "status-badge status-listening" : "status-badge status-online";
+          }
+          break;
+
+        case "transcript_partial":
+          subtitlesBox.innerHTML = `<span class="partial">${p.text}</span>`;
+          break;
+
+        case "transcript_final":
+          subtitlesBox.innerText = p.text;
+          break;
+
+        case "danger_alert":
+          dangerBanner.classList.add("show");
+          dangerMessage.innerText = p.message;
+          valDanger.innerText = "🚨 DANGER DETECTED";
+          valDanger.style.color = "#ef4444";
+          break;
+
+        case "record_draft":
+        case "record_confirmed":
+          const r = p.record || {};
+          valBen.innerText = r.beneficiary_name ? `${r.beneficiary_name} (${r.beneficiary_id})` : (r.beneficiary_id || "—");
+          valType.innerText = r.visit_type || "—";
+          valWeight.innerText = r.weight_kg ? `${r.weight_kg} kg` : "—";
+          valVax.innerText = (r.vaccinations_given && r.vaccinations_given.length) ? r.vaccinations_given.join(", ") : "—";
+          valSupp.innerText = (r.supplements_given && r.supplements_given.length) ? r.supplements_given.join(", ") : "—";
+
+          if (r.danger_flag) {
+            valDanger.innerText = "🚨 DANGER DETECTED";
+            valDanger.style.color = "#ef4444";
+          } else {
+            valDanger.innerText = "Normal";
+            valDanger.style.color = "#10b981";
+          }
+
+          if (ev.type === "record_confirmed") {
+            alert(`✅ Visit Record Confirmed & Saved into Encrypted SQLite! Saved ID: ${p.saved_id}`);
+          }
+          break;
+
+        case "barge_in_ack":
+          stopAudioPlayback();
+          log("Barge-in acknowledged: playback flushed.");
+          break;
+      }
+    }
+
+    // ── Resampler: Convert Native Hardware Sample Rate to 16,000 Hz ──
+    function downsampleBuffer(buffer, inputSampleRate, outputSampleRate = 16000) {
+      if (inputSampleRate === outputSampleRate) {
+        return buffer;
+      }
+      const ratio = inputSampleRate / outputSampleRate;
+      const newLength = Math.round(buffer.length / ratio);
+      const result = new Float32Array(newLength);
+      let offsetResult = 0;
+      let offsetBuffer = 0;
+
+      while (offsetResult < result.length) {
+        const nextOffsetBuffer = Math.round((offsetResult + 1) * ratio);
+        let accum = 0, count = 0;
+        for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+          accum += buffer[i];
+          count++;
+        }
+        result[offsetResult] = count > 0 ? accum / count : 0;
+        offsetResult++;
+        offsetBuffer = nextOffsetBuffer;
+      }
+      return result;
+    }
+
+    // ── Microphone Capture (Resampled 16 kHz PCM Streaming) ──────────
+    async function startMic() {
+      try {
+        if (!playContext) {
+          playContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (playContext.state === "suspended") {
+          await playContext.resume();
+        }
+
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          }
+        });
+
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioContext.state === "suspended") {
+          await audioContext.resume();
+        }
+
+        const nativeSampleRate = audioContext.sampleRate;
+        log(`Microphone initialized: Hardware Sample Rate = ${nativeSampleRate} Hz`);
+
+        const source = audioContext.createMediaStreamSource(micStream);
+        // Use 4096 buffer size for smooth resampling
+        audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+
+        // Zero-gain node avoids feeding microphone audio into laptop speakers
+        const zeroGain = audioContext.createGain();
+        zeroGain.gain.value = 0.0;
+
+        totalBytesSent = 0;
+        chunkBuffer = [];
+
+        audioProcessor.onaudioprocess = (e) => {
+          if (!isRecording && !isPttActive) return;
+          if (isAgentSpeaking && !isPttActive) return; // Prevent laptop speaker echo from polluting STT
+
+          const inputFloat32 = e.inputBuffer.getChannelData(0);
+
+          // Calculate VU RMS level
+          let sumSquares = 0;
+          for (let i = 0; i < inputFloat32.length; i++) {
+            sumSquares += inputFloat32[i] * inputFloat32[i];
+          }
+          const rms = Math.sqrt(sumSquares / inputFloat32.length);
+          const levelPercent = Math.min(100, Math.round(rms * 400));
+          vuFill.style.width = `${levelPercent}%`;
+
+          // Downsample to 16,000 Hz
+          const resampledFloat32 = downsampleBuffer(inputFloat32, nativeSampleRate, 16000);
+
+          // Convert to 16-bit signed PCM
+          const int16 = new Int16Array(resampledFloat32.length);
+          for (let i = 0; i < resampledFloat32.length; i++) {
+            const s = Math.max(-1, Math.min(1, resampledFloat32[i]));
+            int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          }
+
+          // Accumulate and send in 512-sample (1024-byte) chunks for Prisma v3.0
+          for (let i = 0; i < int16.length; i++) {
+            chunkBuffer.push(int16[i]);
+          }
+
+          while (chunkBuffer.length >= 512) {
+            const chunk = new Int16Array(chunkBuffer.splice(0, 512));
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(chunk.buffer);
+              totalBytesSent += chunk.byteLength;
+            }
+          }
+
+          vuStats.innerText = `Rate: ${nativeSampleRate}Hz ➔ 16kHz | Sent: ${Math.round(totalBytesSent / 1024)} KB`;
+        };
+
+        source.connect(audioProcessor);
+        audioProcessor.connect(zeroGain);
+        zeroGain.connect(audioContext.destination);
+
+        isRecording = true;
+        btnMic.classList.add("active");
+        btnMic.innerText = "⏹️ Stop Microphone";
+        statusBadge.innerText = "Listening";
+        statusBadge.className = "status-badge status-listening";
+        vuStatus.innerText = "Mic: Active (Streaming to Gnani Prisma STT)";
+        log("Microphone recording started with live 16kHz downsampling.");
+      } catch (err) {
+        alert("Microphone access error: " + err.message);
+        log("Mic error: " + err.message);
+      }
+    }
+
+    function stopMic() {
+      isRecording = false;
+      if (audioProcessor) {
+        audioProcessor.disconnect();
+        audioProcessor = null;
+      }
+      if (audioContext) {
+        audioContext.close();
+        audioContext = null;
+      }
+      if (micStream) {
+        micStream.getTracks().forEach(t => t.stop());
+        micStream = null;
+      }
+      vuFill.style.width = "0%";
+      vuStatus.innerText = "Mic: Inactive";
+      btnMic.classList.remove("active");
+      btnMic.innerText = "🎤 Start Microphone";
+      statusBadge.innerText = "Online";
+      statusBadge.className = "status-badge status-online";
+      log("Microphone stopped.");
+    }
+
+    btnMic.onclick = () => {
+      if (isRecording) {
+        stopMic();
+      } else {
+        startMic();
+      }
+    };
+
+    // ── Push-To-Talk (Spacebar and Button) ───────────────────────────
+    async function startPtt() {
+      if (!isRecording) {
+        await startMic();
+      }
+      isPttActive = true;
+      btnPtt.classList.add("active");
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "ptt_state", payload: { active: true } }));
+      }
+    }
+
+    function stopPtt() {
+      isPttActive = false;
+      btnPtt.classList.remove("active");
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "ptt_state", payload: { active: false } }));
+      }
+    }
+
+    btnPtt.onmousedown = startPtt;
+    btnPtt.onmouseup = stopPtt;
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "Space" && e.target === document.body && !isPttActive) {
+        e.preventDefault();
+        startPtt();
+      }
+    });
+    window.addEventListener("keyup", (e) => {
+      if (e.code === "Space" && isPttActive) {
+        e.preventDefault();
+        stopPtt();
+      }
+    });
+
+    // ── Web Audio PCM Playback ──────────────────────────────────────
+    function playPcmChunk(arrayBuffer) {
+      if (!playContext) {
+        playContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      }
+      if (playContext.state === "suspended") {
+        playContext.resume();
+      }
+
+      const int16 = new Int16Array(arrayBuffer);
+      const float32 = new Float32Array(int16.length);
+      for (let i = 0; i < int16.length; i++) {
+        float32[i] = int16[i] / 32768.0;
+      }
+
+      const audioBuffer = playContext.createBuffer(1, float32.length, 16000);
+      audioBuffer.copyToChannel(float32, 0);
+
+      const source = playContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(playContext.destination);
+
+      const now = playContext.currentTime;
+      const startTime = Math.max(now, nextPlayTime);
+      source.start(startTime);
+      nextPlayTime = startTime + audioBuffer.duration;
+
+      activeAudioSources.push(source);
+      source.onended = () => {
+        activeAudioSources = activeAudioSources.filter(s => s !== source);
+      };
+    }
+
+    function stopAudioPlayback() {
+      activeAudioSources.forEach(s => {
+        try { s.stop(); } catch (e) {}
+      });
+      activeAudioSources = [];
+      nextPlayTime = 0;
+    }
+
+    // ── Barge-In Button ─────────────────────────────────────────────
+    btnBargeIn.onclick = () => {
+      stopAudioPlayback();
+      isAgentSpeaking = false;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: "barge_in",
+          timestamp: Date.now(),
+          payload: { reason: "manual_stop" }
+        }));
+      }
+      log("Barge-in triggered.");
+    };
+
+    // ── Confirm Visit Button ────────────────────────────────────────
+    btnConfirm.onclick = () => {
+      sendQuickText("Haan theek hai, save karo.");
+    };
+
+    // ── Quick Test Scenario Helper ──────────────────────────────────
+    function sendQuickText(text) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        log(`Sending turn: "${text}"`);
+        ws.send(JSON.stringify({
+          type: "text_turn_debug",
+          timestamp: Date.now(),
+          payload: { text: text }
+        }));
+      } else {
+        alert("WebSocket is not connected yet.");
+      }
+    }
+
+    function sendCustomInput() {
+      const val = customInput.value.trim();
+      if (val) {
+        sendQuickText(val);
+        customInput.value = "";
+      }
+    }
+
+    customInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        sendCustomInput();
+      }
+    });
+
+    // ── Language Selector ───────────────────────────────────────────
+    langSelect.onchange = () => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: "language_change",
+          timestamp: Date.now(),
+          payload: { language: langSelect.value }
+        }));
+      }
+    };
+
+    // Start WebSocket on load
+    window.onload = connectWS;
+  </script>
+</body>
+</html>

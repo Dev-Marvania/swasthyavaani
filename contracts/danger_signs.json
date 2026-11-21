@@ -1,0 +1,181 @@
+{
+  "protocol_source": {
+    "title": "National Health Mission (NHM) — ASHA Training Modules 6 & 7 (Skills that Save Lives) & HBNC Operational Guidelines, MoHFW, Government of India",
+    "reference_url": "https://nhm.gov.in/index1.php?lang=1&level=3&sublinkid=184&lid=257",
+    "strict_policy": "Fixed protocol ONLY. On detecting any sign below, immediately instruct PHC referral in the worker's language and set danger_flag=true. NEVER provide diagnosis, treatment, or dosage."
+  },
+  "maternal_danger_signs": [
+    {
+      "id": "MAT_BLEEDING",
+      "label": "Vaginal bleeding during pregnancy or postpartum",
+      "keywords": [
+        "bleeding",
+        "vaginal bleeding",
+        "heavy bleeding",
+        "spotting",
+        "khoon",
+        "khoon behna",
+        "raktasrav",
+        "rakta",
+        "uthirapokku",
+        "raktham"
+      ]
+    },
+    {
+      "id": "MAT_CONVULSIONS",
+      "label": "Convulsions, fits, or loss of consciousness",
+      "keywords": [
+        "fits",
+        "convulsions",
+        "seizure",
+        "unconscious",
+        "fainted",
+        "daura",
+        "mirgi",
+        "behosh",
+        "jhatke",
+        "moorche",
+        "valippu",
+        "fitlu"
+      ]
+    },
+    {
+      "id": "MAT_PRE_ECLAMPSIA",
+      "label": "Severe headache, blurred vision, or swelling of face/hands",
+      "keywords": [
+        "severe headache",
+        "blurred vision",
+        "face swelling",
+        "high bp",
+        "tez sar dard",
+        "dhundhla dikhna",
+        "chehre par sujan",
+        "thale novu",
+        "mukhada oota",
+        "tala noppi"
+      ]
+    },
+    {
+      "id": "MAT_HIGH_FEVER",
+      "label": "High fever during pregnancy or postpartum",
+      "keywords": [
+        "high fever",
+        "severe fever",
+        "tez bukhar",
+        "bahut bukhar",
+        "jasti jwara",
+        "adiga kaichal",
+        "ekkuva jwaram",
+        "jasta taap"
+      ]
+    },
+    {
+      "id": "MAT_ABDOMINAL_PAIN_FM",
+      "label": "Severe abdominal pain or reduced/absent fetal movement",
+      "keywords": [
+        "severe abdominal pain",
+        "no fetal movement",
+        "baby not moving",
+        "water broke",
+        "pet mein tez dard",
+        "baccha hil nahi raha",
+        "hotte novu",
+        "magu alladutilla",
+        "vayiru vali",
+        "potta noppi"
+      ]
+    }
+  ],
+  "newborn_danger_signs": [
+    {
+      "id": "NB_FEVER_HYPOTHERMIA",
+      "label": "Newborn high fever or very cold body (hypothermia)",
+      "keywords": [
+        "newborn fever",
+        "baby fever",
+        "high fever in newborn",
+        "cold to touch",
+        "hypothermia",
+        "bacche ko tez bukhar",
+        "bacha thanda pad gaya",
+        "maguvige jwara",
+        "magu thandagide",
+        "kuzhandhai kaichal",
+        "papaku jwaram",
+        "balala taap"
+      ]
+    },
+    {
+      "id": "NB_POOR_FEEDING",
+      "label": "Unable to breastfeed, poor sucking, or vomiting everything",
+      "keywords": [
+        "not feeding",
+        "unable to feed",
+        "not sucking",
+        "vomiting everything",
+        "doodh nahi pee raha",
+        "doodh nahi pi raha",
+        "haalu kudiyutilla",
+        "paal kudikkavillai",
+        "paalu tagadam ledu",
+        "doodh pit nahi"
+      ]
+    },
+    {
+      "id": "NB_BREATHING",
+      "label": "Fast breathing, difficult breathing, grunting, or chest indrawing",
+      "keywords": [
+        "fast breathing",
+        "difficult breathing",
+        "chest indrawing",
+        "breathing problem",
+        "blue lips",
+        "tez saans",
+        "pasli chalna",
+        "seena dhasna",
+        "usirata kashta",
+        "moochu thinaral",
+        "oopiri kashtam",
+        "shwas ghenyala tras"
+      ]
+    },
+    {
+      "id": "NB_LETHARGY_CONVULSIONS",
+      "label": "Lethargic, unconscious, weak cry, or newborn convulsions",
+      "keywords": [
+        "lethargic",
+        "limp",
+        "unresponsive",
+        "weak cry",
+        "newborn fits",
+        "sust hai",
+        "bahut sust",
+        "ro nahi raha",
+        "susthagi",
+        "asaiyaamal",
+        "kadaladam ledu",
+        "khup susta"
+      ]
+    },
+    {
+      "id": "NB_JAUNDICE_UMBILICAL",
+      "label": "Yellow palms/soles (severe jaundice) or umbilical cord pus/redness",
+      "keywords": [
+        "yellow palms",
+        "yellow soles",
+        "jaundice",
+        "umbilical pus",
+        "red umbilicus",
+        "peela pad",
+        "piliya",
+        "nabhi mein mavad",
+        "nabhi laal",
+        "arishina",
+        "manjal kamalai",
+        "pachakamerlu",
+        "kavil",
+        "bembi madhye pus"
+      ]
+    }
+  ]
+}

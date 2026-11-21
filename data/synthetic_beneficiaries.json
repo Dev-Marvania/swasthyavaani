@@ -1,0 +1,85 @@
+[
+  {
+    "beneficiary_id": "SYN-ASHA-001",
+    "name": "Priya Devi",
+    "age": 24,
+    "type": "Pregnant",
+    "trimester": 2,
+    "village": "Rampur",
+    "husband_name": "Rajesh Kumar",
+    "last_visit_date": "2026-11-10"
+  },
+  {
+    "beneficiary_id": "SYN-ASHA-002",
+    "name": "Meena Kumari",
+    "age": 22,
+    "type": "Postpartum",
+    "newborn_name": "Baby Meena",
+    "newborn_age_days": 14,
+    "village": "Laxmipur",
+    "husband_name": "Suresh Yadav",
+    "last_visit_date": "2026-11-15"
+  },
+  {
+    "beneficiary_id": "SYN-ASHA-003",
+    "name": "Kavitha S",
+    "age": 28,
+    "type": "Pregnant",
+    "trimester": 3,
+    "village": "Hosahalli",
+    "husband_name": "Suresh S",
+    "last_visit_date": "2026-11-08"
+  },
+  {
+    "beneficiary_id": "SYN-ASHA-004",
+    "name": "Lakshmi R",
+    "age": 20,
+    "type": "Postpartum",
+    "newborn_name": "Baby Lakshmi",
+    "newborn_age_days": 7,
+    "village": "Gandhinagar",
+    "husband_name": "Ramesh R",
+    "last_visit_date": "2026-11-18"
+  },
+  {
+    "beneficiary_id": "SYN-ASHA-005",
+    "name": "Sunita Bai",
+    "age": 26,
+    "type": "Pregnant",
+    "trimester": 1,
+    "village": "Shivajinagar",
+    "husband_name": "Anil Jadhav",
+    "last_visit_date": "2026-11-05"
+  },
+  {
+    "beneficiary_id": "SYN-ASHA-006",
+    "name": "Anjali Devi",
+    "age": 30,
+    "type": "Immunisation",
+    "child_name": "Ravi",
+    "child_age_months": 6,
+    "village": "Rampur",
+    "last_visit_date": "2026-11-12"
+  },
+  {
+    "beneficiary_id": "SYN-ASHA-007",
+    "name": "Fatima Bee",
+    "age": 23,
+    "type": "Pregnant",
+    "trimester": 2,
+    "village": "Sultanpur",
+    "husband_name": "Mohammed Irfan",
+    "last_visit_date": "2026-11-14"
+  },
+  {
+    "beneficiary_id": "SYN-ASHA-008",
+    "name": "Radha M",
+    "age": 19,
+    "type": "Postpartum",
+    "newborn_name": "Baby Radha",
+    "newborn_age_days": 3,
+    "village": "Hosahalli",
+    "husband_name": "Venkatesh M",
+    "last_visit_date": "2026-11-20"
+  }
+]

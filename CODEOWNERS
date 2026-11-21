@@ -1,0 +1,17 @@
+# Replace @backend_dev1 and @backend_dev2 with your GitHub handles
+/contracts/                   @backend_dev1 @backend_dev2
+/AGENTS.md                    @backend_dev1 @backend_dev2
+/.agents/                     @backend_dev1 @backend_dev2
+/backend/main.py              @backend_dev1 @backend_dev2
+
+# Zone A: Speech & WebSocket Streaming
+/voice/                       @backend_dev1
+/backend/routers/ws.py        @backend_dev1
+
+# Zone B: Agent, Clinical Safety & Encrypted DB
+/agent/                       @backend_dev2
+/backend/db.py                @backend_dev2
+/backend/crypto.py            @backend_dev2
+/backend/routers/records.py   @backend_dev2
+/data/                        @backend_dev2
+/scripts/                     @backend_dev2

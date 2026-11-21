@@ -1,0 +1,50 @@
+{
+  "default_language": "hi-IN",
+  "languages": {
+    "hi-IN": {
+      "label": "हिन्दी (Hinglish)",
+      "ai_disclosure_greeting": "Namaste! Main SwasthyaVaani AI sahayak hoon. Aap apni home visit ke notes bol sakti hain, main unhe register mein darj kar dungi.",
+      "phc_referral_alert": "Chetavni! Yeh khatre ka lakshan hai. Kripya bina deri kiye mareez ko turant nazdeeki PHC ya hospital refer karein. Main is record ko urgent flag kar rahi hoon."
+    },
+    "kn-IN": {
+      "label": "ಕನ್ನಡ (Kanglish)",
+      "ai_disclosure_greeting": "Namaskara! Naanu SwasthyaVaani AI sahayaka. Neevu nimma home visit notes helabahudu, naanu adannu register nalli daakhalisuttene.",
+      "phc_referral_alert": "Eccharike! Idu apayada lakshana. Dayavittu thada maadade rogiyannu thakshana hathirada PHC ge refer maadi. Ee record annu urgent endu flag maadiddene."
+    },
+    "ta-IN": {
+      "label": "தமிழ் (Tanglish)",
+      "ai_disclosure_greeting": "Vanakkam! Naan SwasthyaVaani AI uthaviyalar. Neengal ungal home visit kurippugalai sollungal, naan register-il pathivu seigiren.",
+      "phc_referral_alert": "Eccharikkai! Ithu abaya arikuri. Thamadham indri noyaaliyai udane arugil ulla PHC-kku anuppavum. Intha pathivai urgent-aaga flag seithullen."
+    },
+    "te-IN": {
+      "label": "తెలుగు (Tenglish)",
+      "ai_disclosure_greeting": "Namaskaram! Nenu SwasthyaVaani AI sahayakuralini. Meeru mee home visit notes cheppandi, nenu register lo namodu chestanu.",
+      "phc_referral_alert": "Heccharika! Idi pramadakaramaina lakshanam. Dayachesi aalasyam cheyakunda rogini ventane daggarlo unna PHC ki refer cheyandi. Ee record ni urgent ga flag chesanu."
+    },
+    "mr-IN": {
+      "label": "मराठी (Marathi)",
+      "ai_disclosure_greeting": "Namaskar! Mi SwasthyaVaani AI sahayyak aahe. Tumhi tumchya home visit notes bolun sanga, mi register madhye nond karte.",
+      "phc_referral_alert": "Savdhan! He dhokyache lakshan aahe. Krupaya ushir na karta rugnala tatkal javalchya PHC madhye refer kara. Mi hi nond urgent mhanun flag keli aahe."
+    }
+  },
+  "shared_domain_vocabulary": [
+    "ANC",
+    "ANC checkup",
+    "PNC",
+    "HBNC",
+    "PHC",
+    "CHC",
+    "ASHA",
+    "TT injection",
+    "TT-1",
+    "TT-2",
+    "IFA goli",
+    "calcium goli",
+    "BCG",
+    "OPV",
+    "OPV-0",
+    "Pentavalent",
+    "Rotavirus",
+    "ORS"
+  ]
+}
