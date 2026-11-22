@@ -89,7 +89,7 @@ class VisitExtractor:
         for aliases, bid, bname in beneficiaries:
             if any(alias in lower_trans for alias in aliases):
                 data["beneficiary_id"] = bid
-                data["beneficiary_name"] = ben_name or bname
+                data["beneficiary_name"] = bname
                 matched = True
                 break
 

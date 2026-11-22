@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en" data-large-text="true">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="shell-type" content="mobile_tab" />
+  <title>SwasthyaVaani — ASHA Voice Field Register</title>
+  <meta name="description" content="Hands-free AI voice field register PWA for ASHA community health workers." />
+  <meta name="theme-color" content="#0d5c5a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="SwasthyaVaani" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+    rel="stylesheet" />
+
+  <!-- Zero-Build CDNs: Tailwind CSS + LiveKit Browser Client UMD -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.24.1/dist/livekit-client.umd.min.js"></script>
+
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            'primary': '#004341',
+            'primary-container': '#0d5c5a',
+            'primary-fixed': '#abefeb',
+            'on-primary': '#ffffff',
+            'on-primary-container': '#8fd2cf',
+            'secondary': '#006b5f',
+            'secondary-container': '#6df5e1',
+            'secondary-fixed': '#71f8e4',
+            'on-secondary': '#ffffff',
+            'on-secondary-fixed': '#00201c',
+            'tertiary': '#00424e',
+            'surface': '#f8f9ff',
+            'surface-container-lowest': '#ffffff',
+            'surface-container-low': '#eff4ff',
+            'surface-container': '#e5eeff',
+            'surface-container-high': '#dce9ff',
+            'surface-container-highest': '#d3e4fe',
+            'on-surface': '#0b1c30',
+            'on-surface-variant': '#3f4948',
+            'outline': '#6f7978',
+            'error': '#ba1a1a',
+            'error-container': '#ffdad6',
+            'on-error': '#ffffff',
+            'on-error-container': '#93000a',
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    @layer base {
+      html {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        overflow-x: clip;
+        overflow-y: auto;
+        scroll-behavior: smooth;
+      }
+
+      body {
+        width: 100%;
+        min-height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow-x: clip;
+        background-color: #f8f9ff;
+        color: #0b1c30;
+      }
+
+      html.modal-scroll-lock {
+        overflow: hidden !important;
+      }
+
+      .pb-safe {
+        padding-bottom: env(safe-area-inset-bottom, 16px);
+      }
+
+      .pt-safe {
+        padding-top: env(safe-area-inset-top, 0px);
+      }
+    }
+
+    /* High-Contrast Large Text Mode */
+    html[data-large-text="true"] body {
+      font-size: 16px;
+    }
+
+    html[data-large-text="true"] h1 {
+      font-size: 22px;
+    }
+
+    html[data-large-text="true"] h2 {
+      font-size: 20px;
+    }
+
+    html[data-large-text="true"] button,
+    html[data-large-text="true"] select {
+      min-height: 48px;
+    }
+
+    /* Soundwave animation for voice activity */
+    @keyframes soundwave {
+
+      0%,
+      100% {
+        height: 6px;
+      }
+
+      50% {
+        height: 26px;
+      }
+    }
+
+    .animated-bar {
+      animation: soundwave 1.1s ease-in-out infinite;
+    }
+
+    .bar-delay-1 {
+      animation-delay: 0.05s;
+    }
+
+    .bar-delay-2 {
+      animation-delay: 0.2s;
+    }
+
+    .bar-delay-3 {
+      animation-delay: 0.35s;
+    }
+
+    .bar-delay-4 {
+      animation-delay: 0.15s;
+    }
+
+    .bar-delay-5 {
+      animation-delay: 0.3s;
+    }
+
+    .bar-delay-6 {
+      animation-delay: 0.1s;
+    }
+
+    .bar-delay-7 {
+      animation-delay: 0.25s;
+    }
+
+    /* Voice glowing rings */
+    @keyframes pulseRing {
+      0% {
+        transform: scale(0.95);
+        opacity: 0.6;
+      }
+
+      50% {
+        transform: scale(1.15);
+        opacity: 0.3;
+      }
+
+      100% {
+        transform: scale(0.95);
+        opacity: 0.6;
+      }
+    }
+
+    .ring-active-1 {
+      animation: pulseRing 1.8s ease-in-out infinite;
+    }
+
+    .ring-active-2 {
+      animation: pulseRing 2.4s ease-in-out infinite;
+    }
+
+    .ring-active-3 {
+      animation: pulseRing 3.0s ease-in-out infinite;
+    }
+
+    /* Highlighting updated clinical fields in emerald green */
+    .field-updated {
+      background-color: #ecfdf5 !important;
+      box-shadow: 0 0 0 2px #10b981 !important;
+      transition: all 0.3s ease;
+    }
+  </style>
+</head>
+
+<body class="font-sans antialiased flex flex-col min-h-screen">
+  <!-- Hidden LiveKit remote audio sink -->
+  <div id="audio-sink" data-swasthyavaani-audio-sink="true" aria-hidden="true" class="hidden"></div>
+
+  <!-- Header Bar -->
+  <header
+    class="fixed top-0 left-0 right-0 w-full z-40 pt-safe bg-surface/95 backdrop-blur-md shadow-sm border-b border-surface-container">
+    <div class="max-w-[440px] mx-auto h-16 px-4 flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div
+          class="w-10 h-10 rounded-xl bg-primary-container flex items-center justify-center text-on-primary flex-shrink-0 shadow-sm">
+          <span class="material-symbols-outlined text-[22px]">local_hospital</span>
+        </div>
+        <div class="flex flex-col min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="font-bold text-[17px] text-primary tracking-tight truncate">SwasthyaVaani</span>
+            <button id="session-status-badge" type="button" data-status="idle" role="status" aria-live="polite"
+              title="Voice Session Status"
+              class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[11px] font-semibold flex-shrink-0 cursor-default">
+              <span id="session-status-dot" class="w-2 h-2 rounded-full bg-secondary"></span>
+              <span id="session-status-label">Online</span>
+            </button>
+          </div>
+          <span class="text-[12px] font-medium text-on-surface-variant truncate" data-i18n="app_subtitle">Voice Field
+            Register • PS1</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <!-- 1-Tap Quick UI Language Selector -->
+        <div class="relative flex items-center">
+          <button id="header-lang-btn" type="button" aria-label="Change Display Language" title="Change UI Language"
+            class="h-9 px-3 rounded-full border border-surface-container-highest bg-white text-on-surface flex items-center gap-1.5 text-[12px] font-bold shadow-sm active:scale-95 transition-all hover:bg-surface-container-low"
+            onclick="toggleHeaderLangMenu()">
+            <span class="material-symbols-outlined text-[17px] text-primary">translate</span>
+            <span id="header-lang-label">EN</span>
+            <span class="material-symbols-outlined text-[15px] text-on-surface-variant">expand_more</span>
+          </button>
+          <div id="header-lang-menu"
+            class="hidden absolute right-0 top-11 w-48 bg-white rounded-2xl shadow-2xl border border-surface-container p-2 z-50 flex flex-col gap-1 max-h-72 overflow-y-auto">
+            <button type="button"
+              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-semibold hover:bg-surface-container transition-colors flex items-center justify-between"
+              onclick="setAppLanguage('en-IN')">
+              <span>English (Indian)</span>
+              <span class="text-[10px] text-primary font-bold">Default</span>
+            </button>
+            <button type="button"
+              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-semibold hover:bg-surface-container transition-colors"
+              onclick="setAppLanguage('hi-IN')">
+              <span>हिन्दी (Hindi)</span>
+            </button>
+            <button type="button"
+              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-semibold hover:bg-surface-container transition-colors"
+              onclick="setAppLanguage('kn-IN')">
+              <span>ಕನ್ನಡ (Kannada)</span>
+            </button>
+            <button type="button"
+              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-semibold hover:bg-surface-container transition-colors"
+              onclick="setAppLanguage('ta-IN')">
+              <span>தமிழ் (Tamil)</span>
+            </button>
+            <button type="button"
+              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-semibold hover:bg-surface-container transition-colors"
+              onclick="setAppLanguage('te-IN')">
+              <span>తెలుగు (Telugu)</span>
+            </button>
+            <button type="button"
+              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-semibold hover:bg-surface-container transition-colors"
+              onclick="setAppLanguage('mr-IN')">
+              <span>मराठी (Marathi)</span>
+            </button>
+            <button type="button"
+              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-semibold hover:bg-surface-container transition-colors"
+              onclick="setAppLanguage('bn-IN')">
+              <span>বাংলা (Bengali)</span>
+            </button>
+            <button type="button"
+              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-semibold hover:bg-surface-container transition-colors"
+              onclick="setAppLanguage('gu-IN')">
+              <span>ગુજરાતી (Gujarati)</span>
+            </button>
+            <button type="button"
+              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-semibold hover:bg-surface-container transition-colors"
+              onclick="setAppLanguage('pa-IN')">
+              <span>ਪੰਜਾਬੀ (Punjabi)</span>
+            </button>
+            <button type="button"
+              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-semibold hover:bg-surface-container transition-colors"
+              onclick="setAppLanguage('ml-IN')">
+              <span>മലയാളം (Malayalam)</span>
+            </button>
+          </div>
+        </div>
+        <button id="drawer-open-btn" type="button" aria-label="Open navigation menu"
+          class="w-10 h-10 flex items-center justify-center text-on-surface hover:bg-surface-container active:scale-95 rounded-xl transition-colors"
+          onclick="toggleNavMenu(true)">
+          <span class="material-symbols-outlined text-[26px]">menu</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Dashboard Content -->
+  <main class="flex flex-col relative w-full max-w-[440px] mx-auto pt-16 bg-surface min-h-screen pb-safe">
+    <div class="flex flex-col w-full">
+      <!-- Top Greeting & Context Status -->
+      <section class="px-4 pt-4 pb-2">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex flex-col min-w-0">
+            <div class="flex items-center gap-1.5">
+              <h1 id="asha-header-greeting" class="text-[20px] font-bold text-on-surface tracking-tight truncate">ASHA
+                Kavita • Ward 4</h1>
+              <span class="text-xl">👋</span>
+            </div>
+            <div class="flex items-center gap-2 mt-1">
+              <span
+                class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant text-[12px] font-semibold">
+                <span class="material-symbols-outlined text-[14px] text-secondary">location_on</span>
+                <span data-i18n="location_shivajinagar">Shivajinagar</span>
+              </span>
+              <span
+                class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[12px] font-semibold">
+                <span class="material-symbols-outlined text-[14px]">groups</span>
+                <span data-i18n="households_count">42 Households</span>
+              </span>
+            </div>
+          </div>
+          <!-- Today's Visits Completed Dial -->
+          <button id="today-saved-visits-shortcut" type="button" aria-label="View today's saved visits"
+            class="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-surface-container hover:bg-surface-container-high shrink-0 text-center min-w-[62px] active:scale-95 transition-transform border border-surface-container-highest">
+            <span id="dashboard-visits-count" class="text-[18px] font-bold text-secondary leading-none">0</span>
+            <span class="text-[11px] font-semibold text-on-surface-variant mt-1" data-i18n="visits_label">Visits</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Offline / Network Warning Banner (zero footprint unless offline) -->
+      <div class="px-4 flex flex-col gap-2">
+        <div id="offline-banner" role="status"
+          class="hidden flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+          <span class="material-symbols-outlined text-[18px] text-amber-600">wifi_off</span>
+          <span>Offline — Live voice streaming requires internet connection.</span>
+        </div>
+      </div>
+
+      <!-- Preserved Hero Cards on Main Screen: Stripped Down to Giant Direct Voice Triggers -->
+      <section class="px-4 mt-3 flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-[17px] font-bold text-on-surface tracking-tight">Active Healthcare Hubs</h2>
+          <span
+            class="text-[12px] font-semibold text-secondary bg-secondary-fixed/50 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+            Tap Card to Dictate
+          </span>
+        </div>
+
+        <!-- Hero Card 1: Maternal & Child Care (ANC/PNC) - Full-Card Voice Button -->
+        <article id="hero-card-maternal" role="button" tabindex="0"
+          aria-label="Start voice note for Maternal and Child Care"
+          class="relative w-full h-48 sm:h-52 rounded-2xl overflow-hidden shadow-md border border-surface-container cursor-pointer transition-all duration-200 active:scale-[0.98] hover:shadow-lg group"
+          data-dept="maternal" data-visit-hint="ANC / Maternal Care">
+          <img alt="Maternal and Child Care"
+            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJ5HPBlX1GLGDIWdpCUfc3CeelcmSIM1Ug3Ix00yoP8RCB_KrvaACdL8CXsVAMyas8RdBvclT9cGx7ehsjUAq2UkiKXP2ua7_K-0F117xXfGENXCsmYfsIyhRfvqL5P_wQOO0RSD9QLOlk_zqj-iJlaT4kU0C0IOPCtCrTCsuHEx4lVtbPWELtiIEjaAQO-v8t9yk2tmVydwIiHU3JrSA-Zf_Yncx_MnDe1yWasUo" />
+          <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-black/20"></div>
+
+          <!-- Subtle clean microphone icon badge -->
+          <div class="absolute top-3.5 right-3.5">
+            <span
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/95 backdrop-blur-md text-primary text-[12px] font-bold shadow-md group-hover:bg-white transition-colors">
+              <span class="material-symbols-outlined text-[17px] text-secondary animate-pulse">mic</span>
+              <span data-i18n="tap_to_speak">Tap to Speak</span>
+            </span>
+          </div>
+
+          <!-- Bottom Title -->
+          <div class="absolute bottom-4 left-4 right-4 text-white">
+            <h3
+              class="text-[20px] font-bold tracking-tight text-white drop-shadow-md flex items-center justify-between">
+              <span data-i18n="hero_maternal_title">Maternal &amp; Child Care (ANC/PNC)</span>
+              <span
+                class="w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white shrink-0 group-hover:bg-white/30 transition-colors">
+                <span class="material-symbols-outlined text-[18px]">mic</span>
+              </span>
+            </h3>
+          </div>
+        </article>
+
+        <!-- Hero Card 2: Immunization Tracking - Full-Card Voice Button -->
+        <article id="hero-card-immunization" role="button" tabindex="0"
+          aria-label="Start voice note for Immunization Tracking"
+          class="relative w-full h-48 sm:h-52 rounded-2xl overflow-hidden shadow-md border border-surface-container cursor-pointer transition-all duration-200 active:scale-[0.98] hover:shadow-lg group"
+          data-dept="immunization" data-visit-hint="Immunization">
+          <img alt="Immunization Vaccination Program"
+            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            src="https://lh3.googleusercontent.com/aida-public/AB6AXuDL4hVdAGYDXfr-RyY1sUCl8mGMtlo6OthhAZpYvjqSWynMAcmcKao4vfKH48jqLbwSaRH9geLnEwT4R7svaF-cqdU4EFQyAAho0doLw2HH9Lu4FZH5YuGbZ6hpaedBV7UnSgF9EKvrfzp364J6J_V8WV9zU4w2AgJi7Orq-lD2JlM9YUQ6qnsTELE39gXtQH33PySbsudEfrHGQ6qT1PRfPvzAkbQH1UCWnsMtaA0" />
+          <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-black/20"></div>
+
+          <!-- Subtle clean microphone icon badge -->
+          <div class="absolute top-3.5 right-3.5">
+            <span
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/95 backdrop-blur-md text-primary text-[12px] font-bold shadow-md group-hover:bg-white transition-colors">
+              <span class="material-symbols-outlined text-[17px] text-secondary animate-pulse">mic</span>
+              <span data-i18n="tap_to_speak">Tap to Speak</span>
+            </span>
+          </div>
+
+          <!-- Bottom Title -->
+          <div class="absolute bottom-4 left-4 right-4 text-white">
+            <h3
+              class="text-[20px] font-bold tracking-tight text-white drop-shadow-md flex items-center justify-between">
+              <span data-i18n="hero_immu_title">Immunization Tracking</span>
+              <span
+                class="w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white shrink-0 group-hover:bg-white/30 transition-colors">
+                <span class="material-symbols-outlined text-[18px]">mic</span>
+              </span>
+            </h3>
+          </div>
+        </article>
+      </section>
+
+      <!-- Emergency Quick Action Banner -->
+      <section class="px-4 mt-4 pb-6">
+        <a href="tel:108"
+          class="w-full p-3.5 rounded-2xl bg-surface-container-low hover:bg-surface-container border border-surface-container active:scale-[0.99] transition-all flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-error text-white flex items-center justify-center shrink-0 shadow-sm">
+              <span class="material-symbols-outlined text-[20px]">emergency</span>
+            </div>
+            <div class="flex flex-col">
+              <span class="text-[14px] font-bold text-on-surface" data-i18n="emergency_108_title">Emergency Ambulance
+                (108)</span>
+              <span class="text-[12px] text-on-surface-variant" data-i18n="emergency_108_sub">Immediate maternal &amp;
+                pediatric emergency dispatch</span>
+            </div>
+          </div>
+          <span
+            class="w-9 h-9 rounded-full bg-white text-error flex items-center justify-center shadow-sm shrink-0 font-bold text-xs"
+            data-i18n="dial_btn">
+            Dial
+          </span>
+        </a>
+      </section>
+    </div>
+  </main>
+
+  <!-- Cleaned-up Navigation Drawer (Strictly Accessible Items) -->
+  <div id="nav-menu-drawer"
+    class="fixed inset-0 z-50 transition-opacity duration-300 opacity-0 invisible pointer-events-none flex justify-end">
+    <div id="nav-menu-backdrop" class="absolute inset-0 bg-[#0b1c30]/40 backdrop-blur-sm transition-opacity"
+      onclick="toggleNavMenu(false)"></div>
+    <div id="nav-menu-panel"
+      class="relative w-full max-w-xs h-full bg-white shadow-2xl flex flex-col justify-between transition-transform duration-300 ease-out transform translate-x-full border-l border-surface-container z-10 pt-safe pb-safe overflow-y-auto">
+      <div>
+        <!-- Drawer Header with ASHA Kavita Identity -->
+        <div class="p-5 pb-4 border-b border-surface-container flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <img alt="ASHA Kavita Profile"
+              class="w-11 h-11 rounded-full object-cover ring-2 ring-primary/20 bg-surface-container-high"
+              src="/avatar-sunita.svg" />
+            <div class="flex flex-col min-w-0">
+              <span class="text-[16px] font-bold text-on-surface truncate">ASHA Kavita</span>
+              <span class="text-[12px] text-secondary font-semibold">Ward 4 • Shivajinagar</span>
+            </div>
+          </div>
+          <button type="button" aria-label="Close menu" onclick="toggleNavMenu(false)"
+            class="w-9 h-9 rounded-full bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-on-surface active:scale-90 transition-all">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+
+        <!-- Accessible Drawer Items -->
+        <nav class="p-4 flex flex-col gap-3">
+          <!-- 0. ASHA Worker Login / Profile Switcher -->
+          <button id="drawer-login-btn" type="button" onclick="openLoginModal()"
+            class="w-full text-left flex items-center gap-3.5 p-3 rounded-2xl bg-secondary-fixed/20 hover:bg-secondary-fixed/35 transition-colors active:scale-95 group border border-secondary-fixed/40">
+            <div
+              class="w-10 h-10 rounded-xl bg-secondary-fixed text-on-secondary-fixed flex items-center justify-center shrink-0 shadow-sm">
+              <span class="material-symbols-outlined text-[22px]">badge</span>
+            </div>
+            <div class="flex flex-col flex-1 min-w-0">
+              <span class="text-[14px] font-bold text-on-surface" data-i18n="drawer_login_title">ASHA Worker Login</span>
+              <span id="drawer-login-subtext" class="text-[11px] text-on-surface-variant truncate">Sign in or switch worker</span>
+            </div>
+            <span class="material-symbols-outlined text-[18px] text-on-surface-variant">login</span>
+          </button>
+
+          <!-- 1. Today's Saved Visits -->
+          <button id="drawer-saved-visits-btn" type="button"
+            class="w-full text-left flex items-center gap-3.5 p-3 rounded-2xl bg-surface-container hover:bg-surface-container-high transition-colors active:scale-95 group border border-surface-container-highest">
+            <div
+              class="w-10 h-10 rounded-xl bg-primary-container text-on-primary flex items-center justify-center shrink-0">
+              <span class="material-symbols-outlined text-[22px]">fact_check</span>
+            </div>
+            <div class="flex flex-col flex-1 min-w-0">
+              <span class="text-[15px] font-bold text-on-surface" data-i18n="drawer_saved_title">Today's Saved
+                Visits</span>
+              <span id="drawer-saved-visits-counter" class="text-[12px] text-on-surface-variant truncate">0 visits
+                recorded today</span>
+            </div>
+            <span class="material-symbols-outlined text-[18px] text-on-surface-variant">chevron_right</span>
+          </button>
+
+          <!-- 2. Voice Language Selector -->
+          <div class="p-3.5 rounded-2xl bg-surface-container-low border border-surface-container flex flex-col gap-2">
+            <div class="flex items-center gap-2 text-primary font-bold text-[14px]">
+              <span class="material-symbols-outlined text-[20px]">record_voice_over</span>
+              <span data-i18n="drawer_voice_lang_title">Voice Language</span>
+            </div>
+            <select id="voice-language-select" aria-label="Select voice language"
+              class="w-full h-11 rounded-xl border border-surface-container-highest bg-white px-3 text-[13px] font-semibold text-on-surface focus:border-primary focus:outline-none">
+              <option value="en-IN" selected>Indian English</option>
+              <option value="hi-IN">Hindi (हिन्दी / Hinglish)</option>
+              <option value="kn-IN">Kannada (ಕನ್ನಡ)</option>
+              <option value="ta-IN">Tamil (தமிழ்)</option>
+              <option value="te-IN">Telugu (తెలుగు)</option>
+              <option value="mr-IN">Marathi (मराठी)</option>
+              <option value="bn-IN">Bengali (বাংলা)</option>
+              <option value="gu-IN">Gujarati (ગુજરાતી)</option>
+              <option value="pa-IN">Punjabi (ਪੰਜਾਬੀ)</option>
+              <option value="ml-IN">Malayalam (മലയാളം)</option>
+            </select>
+            <span class="text-[11px] text-on-surface-variant leading-tight" data-i18n="drawer_voice_lang_desc">
+              AI assistant will speak and transcribe in this language.
+            </span>
+          </div>
+
+          <!-- 3. UI Display Language Selector -->
+          <div class="p-3.5 rounded-2xl bg-surface-container-low border border-surface-container flex flex-col gap-2">
+            <div class="flex items-center gap-2 text-primary font-bold text-[14px]">
+              <span class="material-symbols-outlined text-[20px]">language</span>
+              <span data-i18n="drawer_ui_lang_title">UI Display Language</span>
+            </div>
+            <select id="ui-language-select" aria-label="Select UI display language"
+              class="w-full h-11 rounded-xl border border-surface-container-highest bg-white px-3 text-[13px] font-semibold text-on-surface focus:border-primary focus:outline-none"
+              onchange="setAppLanguage(this.value)">
+              <option value="en-IN" selected>Indian English</option>
+              <option value="hi-IN">हिन्दी (Hindi)</option>
+              <option value="kn-IN">ಕನ್ನಡ (Kannada)</option>
+              <option value="ta-IN">தமிழ் (Tamil)</option>
+              <option value="te-IN">తెలుగు (Telugu)</option>
+              <option value="mr-IN">मराठी (Marathi)</option>
+              <option value="bn-IN">বাংলা (Bengali)</option>
+              <option value="gu-IN">ગુજરાતી (Gujarati)</option>
+              <option value="pa-IN">ਪੰਜਾਬੀ (Punjabi)</option>
+              <option value="ml-IN">മലയാളം (Malayalam)</option>
+            </select>
+            <span class="text-[11px] text-on-surface-variant leading-tight" data-i18n="drawer_ui_lang_desc">
+              All labels, buttons, and cards will display in this language.
+            </span>
+          </div>
+        </nav>
+
+        <!-- Dev / Judge Demo Strip (Strictly Hidden unless ?demo=true in URL) -->
+        <div id="demo-test-strip" class="hidden mx-4 mt-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[11px] font-bold text-amber-900">Judge Demo Simulation</span>
+            <button id="reset-record-btn" type="button" class="text-[11px] font-bold text-error">Reset</button>
+          </div>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button type="button" data-sim-type="normal"
+              class="py-1.5 px-2 rounded-lg bg-white border border-amber-300 text-[11px] font-semibold text-amber-900">ANC
+              Vitals</button>
+            <button type="button" data-sim-type="correction"
+              class="py-1.5 px-2 rounded-lg bg-white border border-amber-300 text-[11px] font-semibold text-amber-900">Correction</button>
+            <button type="button" data-sim-type="danger"
+              class="py-1.5 px-2 rounded-lg bg-error text-white text-[11px] font-semibold">Danger Sign</button>
+            <button type="button" data-sim-type="confirm"
+              class="py-1.5 px-2 rounded-lg bg-secondary text-white text-[11px] font-semibold">Confirm</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Drawer Footer -->
+      <div class="p-4 border-t border-surface-container flex flex-col gap-2">
+        <div class="text-center">
+          <span class="text-[11px] font-semibold text-on-surface-variant">SwasthyaVaani</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Truly Hands-Free Voice Bottom Sheet Modal -->
+  <div
+    class="fixed inset-0 z-50 flex items-end justify-center transition-opacity duration-300 opacity-0 invisible pointer-events-none"
+    id="voice-department-modal">
+    <div class="absolute inset-0 bg-[#0b1c30]/50 backdrop-blur-sm transition-opacity" id="voice-modal-backdrop"
+      onclick="closeVoiceModal()"></div>
+    <div
+      class="relative w-full max-w-lg max-h-[92vh] flex flex-col bg-surface rounded-t-[32px] shadow-2xl overflow-hidden transition-transform duration-300 transform border-t border-white/60 pb-safe pointer-events-none translate-y-full"
+      id="voice-modal-sheet">
+      <!-- Drag Handle, New Record Button & Dismiss -->
+      <div class="relative w-full flex items-center justify-between px-4 pt-3 pb-2 shrink-0 bg-surface">
+        <button type="button" id="btn-new-visit-action"
+          class="px-2.5 py-1 rounded-xl bg-secondary-fixed text-on-secondary-fixed text-[11px] font-bold flex items-center gap-1 active:scale-95 shadow-sm transition-all"
+          onclick="window.startNewVisit()" title="Start fresh record with new dynamic ID">
+          <span class="material-symbols-outlined text-[15px]">add_circle</span>
+          <span data-i18n="new_record_btn">New Record</span>
+        </button>
+        <div class="w-12 h-1.5 rounded-full bg-slate-300 mx-auto cursor-pointer" onclick="closeVoiceModal()"></div>
+        <button type="button" aria-label="Close modal"
+          class="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant active:scale-90 transition-all"
+          onclick="closeVoiceModal()">
+          <span class="material-symbols-outlined text-[18px]">close</span>
+        </button>
+      </div>
+
+      <!-- Voice Session Container (Scrollable) -->
+      <div class="flex-1 min-h-0 px-5 pt-1 pb-6 overflow-y-auto">
+        <div class="w-full flex flex-col items-center text-center">
+          <!-- Department Badge Pill -->
+          <div
+            class="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-white shadow-sm border border-surface-container mb-2">
+            <span class="text-xs" id="modal-badge-icon">🌱</span>
+            <span class="text-[12px] font-bold text-primary" id="modal-badge-dept">Maternal &amp; Child Care • Ward
+              4</span>
+          </div>
+
+          <h2 class="text-[24px] font-bold text-on-surface tracking-tight leading-tight mb-1" id="modal-title-text"
+            data-i18n="modal_title">Tap to Speak</h2>
+          <p class="text-[13px] text-on-surface-variant max-w-xs mb-3" id="modal-subtitle-text"
+            data-i18n="modal_subtitle">Speak naturally in your mother tongue or Hindi-English mix.</p>
+
+          <!-- Spoken Example Cue right above the Tap to Talk circle -->
+          <div
+            class="w-full max-w-sm px-3.5 py-2.5 rounded-xl bg-surface-container-high/80 border border-primary/20 text-center mb-2">
+            <p class="text-[12px] font-semibold text-primary leading-snug" id="spoken-example-cue-text"
+              data-i18n="example_cue">
+              💬 <strong>Say:</strong> &ldquo;Sunita Devi, ID 104, ANC checkup, weight 54.5 kilo, TT injection given,
+              next visit 15 December&rdquo;
+            </p>
+          </div>
+
+          <!-- Center Voice Pulse Mic Section (Single glowing circular Tap to Talk button) -->
+          <div class="relative shrink-0 flex items-center justify-center w-44 h-44 my-1">
+            <div
+              class="pointer-events-none absolute w-40 h-40 rounded-full bg-secondary-fixed/40 transition-all duration-700 ease-out ring-active-3"
+              id="wave-ring-3"></div>
+            <div
+              class="pointer-events-none absolute w-32 h-32 rounded-full bg-secondary-container/50 transition-all duration-500 ease-out ring-active-2"
+              id="wave-ring-2"></div>
+            <div
+              class="pointer-events-none absolute w-26 h-26 rounded-full bg-secondary-fixed/60 transition-all duration-300 ease-out ring-active-1"
+              id="wave-ring-1"></div>
+            <button type="button" id="voice-record-btn" data-testid="voice-record-btn"
+              class="relative z-10 w-24 h-24 rounded-full bg-primary-container text-white flex flex-col items-center justify-center shadow-lg active:scale-95 transition-all hover:bg-primary">
+              <span class="material-symbols-outlined text-[36px] leading-none" id="voice-mic-icon">mic</span>
+              <span class="text-[11px] font-bold tracking-wide mt-1" id="voice-btn-sublabel" data-i18n="tap_to_talk">Tap
+                to Talk</span>
+            </button>
+          </div>
+
+          <!-- Live Animated Sound Bars -->
+          <div class="shrink-0 flex items-center justify-center gap-1.5 h-6 mb-2">
+            <div class="waveform-bar animated-bar bar-delay-1 w-1.5 rounded-full bg-secondary"></div>
+            <div class="waveform-bar animated-bar bar-delay-2 w-1.5 rounded-full bg-secondary"></div>
+            <div class="waveform-bar animated-bar bar-delay-3 w-1.5 rounded-full bg-secondary"></div>
+            <div class="waveform-bar animated-bar bar-delay-4 w-1.5 rounded-full bg-secondary"></div>
+            <div class="waveform-bar animated-bar bar-delay-5 w-1.5 rounded-full bg-secondary"></div>
+            <div class="waveform-bar animated-bar bar-delay-6 w-1.5 rounded-full bg-secondary"></div>
+            <div class="waveform-bar animated-bar bar-delay-7 w-1.5 rounded-full bg-secondary"></div>
+          </div>
+
+          <!-- Live Status Pill -->
+          <div class="shrink-0 mb-3">
+            <span
+              class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-surface-container-high text-on-surface text-[12px] font-bold shadow-sm border border-surface-container-highest">
+              <span class="w-2.5 h-2.5 rounded-full bg-secondary transition-colors" id="status-indicator-dot"></span>
+              <span id="modal-status-text" data-i18n="status_ready">Ready to Listen</span>
+            </span>
+          </div>
+
+          <!-- Live Spoken Feedback / Transcript Read-back -->
+          <div class="w-full max-w-sm p-3 rounded-xl bg-white border border-surface-container text-left mb-3">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[11px] font-bold text-secondary uppercase tracking-wider flex items-center gap-1">
+                <span class="material-symbols-outlined text-[14px]">record_voice_over</span>
+                <span data-i18n="live_transcript_heading">Live Voice Transcript / AI Read-back</span>
+              </span>
+              <span id="transcript-state-label" class="text-[10px] text-on-surface-variant">Live</span>
+            </div>
+            <p id="review-raw-note" class="text-[13px] text-on-surface leading-relaxed italic">
+              &ldquo;Tap to Talk and dictate your visit notes hands-free. Beneficiary name and clinical vitals will
+              extract automatically.&rdquo;
+            </p>
+          </div>
+
+          <!-- Urgent PHC Referral Alert Banner (Hidden by default, shown immediately when phc_referral_needed === true) -->
+          <section id="phc-referral-banner" data-testid="phc-referral-banner" role="alert" aria-live="assertive"
+            class="hidden w-full max-w-sm mb-3 rounded-2xl border-2 border-red-700 bg-error p-3.5 text-on-error shadow-md text-left">
+            <div class="flex items-start gap-3">
+              <div class="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-[20px] text-white">warning</span>
+              </div>
+              <div class="flex-1 min-w-0">
+                <h3 class="text-[14px] font-bold text-white" data-i18n="phc_alert_title">Urgent PHC Referral Required
+                </h3>
+                <p class="mt-0.5 text-[12px] text-red-100 leading-snug" data-i18n="phc_alert_text">
+                  Danger signs detected! Refer beneficiary immediately to the Primary Health Centre (PHC).
+                </p>
+                <ul id="danger-signs-list"
+                  class="mt-2 space-y-1 border-t border-white/25 pt-1.5 text-[12px] font-bold text-white"></ul>
+              </div>
+            </div>
+          </section>
+
+          <!-- Live Visit Record Card (Prominently Visible during Voice Session) -->
+          <div data-testid="visit-card"
+            class="w-full max-w-sm p-4 rounded-2xl bg-white border border-surface-container-highest shadow-sm flex flex-col gap-3 text-left">
+            <div class="flex items-center justify-between pb-2 border-b border-surface-container">
+              <span class="text-[12px] font-bold text-secondary uppercase tracking-wider flex items-center gap-1">
+                <span class="material-symbols-outlined text-[15px]">clinical_notes</span>
+                <span data-i18n="live_card_title">Live Visit Record</span>
+              </span>
+              <div id="confirmed-badge"
+                class="hidden inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[11px] font-bold">
+                <span class="material-symbols-outlined text-[14px]">task_alt</span>
+                <span data-i18n="confirmed_badge">Confirmed &amp; Saved</span>
+              </div>
+              <div id="draft-status-text"
+                class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface text-[11px] font-semibold">
+                <span class="material-symbols-outlined text-[13px] text-secondary">sync</span>
+                <span id="draft-status-label" data-i18n="extracting_badge">Extracting from speech</span>
+              </div>
+            </div>
+
+            <!-- Beneficiary Name / ID (Top Auto-Filled Field) -->
+            <div id="field-beneficiary" class="p-2.5 rounded-xl bg-surface-container-low transition-colors">
+              <span class="text-[11px] font-semibold text-on-surface-variant block"
+                data-i18n="field_beneficiary">Beneficiary Name / ID</span>
+              <div class="flex items-center justify-between gap-2 mt-0.5">
+                <span id="val-beneficiary-name" class="font-bold text-[15px] text-on-surface"
+                  data-i18n="listening_placeholder">Listening for beneficiary name / ID...</span>
+                <span id="val-beneficiary-id" class="text-[12px] font-bold text-secondary tabular-nums"></span>
+              </div>
+            </div>
+
+            <!-- Extracted Clinical Vitals Grid -->
+            <div class="grid grid-cols-2 gap-2">
+              <div id="field-visit_type" class="p-2.5 rounded-xl bg-surface-container-low transition-colors">
+                <span class="text-[11px] font-semibold text-on-surface-variant flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[13px] text-primary">monitor_heart</span>
+                  <span data-i18n="field_visit_type">Visit Type</span>
+                </span>
+                <span id="val-visit-type" class="font-bold text-[14px] text-on-surface mt-0.5 block">—</span>
+              </div>
+
+              <div id="field-weight_kg" class="p-2.5 rounded-xl bg-surface-container-low transition-colors">
+                <span class="text-[11px] font-semibold text-on-surface-variant flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[13px] text-secondary">scale</span>
+                  <span data-i18n="field_weight">Weight (kg)</span>
+                </span>
+                <span id="val-weight-kg"
+                  class="font-bold text-[14px] text-on-surface mt-0.5 tabular-nums block">—</span>
+              </div>
+
+              <!-- Two Dedicated Vaccine Boxes: Given [Given] & Due [Due] -->
+              <div class="col-span-2 grid grid-cols-2 gap-2">
+                <!-- Box 1: Vaccines Given -->
+                <div id="field-vaccinations_given"
+                  class="p-2.5 rounded-xl bg-teal-50/70 border border-teal-200/80 transition-colors">
+                  <span class="text-[11px] font-semibold text-teal-900 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[13px] text-teal-700">task_alt</span>
+                    <span data-i18n="field_vaccines_given">Vaccines Given</span>
+                  </span>
+                  <span id="val-vaccinations-given" class="font-bold text-[13px] text-teal-950 mt-0.5 block"
+                    data-i18n="none_recorded">None recorded</span>
+                </div>
+
+                <!-- Box 2: Vaccines Due -->
+                <div id="field-vaccinations_due"
+                  class="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200/80 transition-colors">
+                  <span class="text-[11px] font-semibold text-amber-900 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[13px] text-amber-700">pending_actions</span>
+                    <span data-i18n="field_vaccines_due">Vaccines Due</span>
+                  </span>
+                  <span id="val-vaccinations-due" class="font-bold text-[13px] text-amber-950 mt-0.5 block"
+                    data-i18n="none_recorded">None recorded</span>
+                </div>
+              </div>
+
+              <div id="field-next_visit_date"
+                class="col-span-2 p-2.5 rounded-xl bg-surface-container-low transition-colors flex items-center justify-between">
+                <div>
+                  <span class="text-[11px] font-semibold text-on-surface-variant flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[13px] text-primary">event</span>
+                    <span data-i18n="field_next_date">Next Scheduled Date</span>
+                  </span>
+                  <span id="val-next-visit-date"
+                    class="font-bold text-[13px] text-primary mt-0.5 block tabular-nums">—</span>
+                </div>
+                <button type="button" id="confirm-record-action-btn"
+                  class="px-3 py-1.5 rounded-xl bg-secondary-fixed text-on-secondary-fixed text-[12px] font-bold shadow-sm active:scale-95 transition-all"
+                  onclick="confirmAndSaveCurrentVisit()">
+                  <span data-i18n="confirm_save_btn">Confirm &amp; Save</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reusable Workspace Bottom Sheet (Today's Saved Visits, Rosters) -->
+  <div id="workspace-modal"
+    class="fixed inset-0 z-50 flex items-end justify-center transition-opacity duration-300 opacity-0 invisible pointer-events-none">
+    <div class="absolute inset-0 bg-[#0b1c30]/40 backdrop-blur-sm" onclick="closeWorkspace()"></div>
+    <div id="workspace-sheet"
+      class="relative w-full max-w-lg max-h-[88vh] bg-surface rounded-t-[32px] shadow-2xl border-t border-white/60 flex flex-col transition-transform duration-300 transform translate-y-full pointer-events-none pb-safe">
+      <div class="px-5 pt-3 pb-3 border-b border-surface-container bg-white rounded-t-[32px] shrink-0">
+        <div class="w-12 h-1.5 rounded-full bg-slate-300 mx-auto mb-2.5 cursor-pointer" onclick="closeWorkspace()">
+        </div>
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex flex-col min-w-0">
+            <h2 id="workspace-title" class="text-[18px] font-bold text-on-surface tracking-tight">Today's Saved Visits
+            </h2>
+            <p id="workspace-subtitle" class="text-xs text-on-surface-variant mt-0.5 leading-snug">Confirmed field
+              records for Ward 4</p>
+          </div>
+          <button type="button" aria-label="Close panel" onclick="closeWorkspace()"
+            class="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant active:scale-90 shrink-0">
+            <span class="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+      </div>
+      <div id="workspace-body" class="p-4 overflow-y-auto flex-1 min-h-0"></div>
+    </div>
+  </div>
+
+  <!-- Toast for Visit Confirmation -->
+  <div id="sync-success-toast"
+    class="hidden fixed bottom-6 left-4 right-4 max-w-md mx-auto z-[70] p-4 rounded-2xl bg-primary text-white shadow-2xl flex items-center justify-between gap-3 transform transition-all duration-300">
+    <div class="flex items-center gap-2.5">
+      <div
+        class="w-9 h-9 rounded-full bg-secondary-fixed text-on-secondary-fixed flex items-center justify-center shrink-0">
+        <span class="material-symbols-outlined text-[20px]">check_circle</span>
+      </div>
+      <div class="flex flex-col">
+        <span class="text-[13px] font-bold leading-tight" id="toast-title">Visit Confirmed &amp; Saved!</span>
+        <span class="text-[11px] text-teal-200 leading-tight mt-0.5" id="toast-subtitle">Appended to Today's Saved
+          Visits register</span>
+      </div>
+    </div>
+    <button type="button"
+      class="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white active:scale-90"
+      onclick="document.getElementById('sync-success-toast').classList.add('hidden')">
+      <span class="material-symbols-outlined text-[16px]">close</span>
+    </button>
+  </div>
+
+  <!-- ASHA Worker Login / Profile Modal -->
+  <div id="asha-login-modal"
+    class="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm hidden p-4 transition-opacity">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 border border-surface-container transform transition-transform">
+      <div class="flex items-center justify-between pb-3 border-b border-surface-container">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-secondary-fixed text-on-secondary-fixed flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-[20px]">badge</span>
+          </div>
+          <div>
+            <h3 class="text-[17px] font-bold text-on-surface leading-tight" data-i18n="login_modal_title">ASHA Worker Login</h3>
+            <span class="text-[11px] text-on-surface-variant" data-i18n="login_modal_sub">Set active field register profile</span>
+          </div>
+        </div>
+        <button type="button" aria-label="Close login modal" onclick="closeLoginModal()"
+          class="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant active:scale-90">
+          <span class="material-symbols-outlined text-[18px]">close</span>
+        </button>
+      </div>
+
+      <form id="asha-login-form" onsubmit="handleAshaLogin(event)" class="mt-4 flex flex-col gap-3">
+        <div>
+          <label class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wide block" data-i18n="login_lbl_name">ASHA Worker Name</label>
+          <input id="login-input-name" type="text" value="ASHA Kavita" required placeholder="e.g. ASHA Kavita"
+            class="w-full h-11 px-3.5 rounded-xl border border-surface-container-highest bg-surface-container-low text-[14px] font-semibold text-on-surface focus:border-primary focus:bg-white focus:outline-none mt-1" />
+        </div>
+        <div>
+          <label class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wide block" data-i18n="login_lbl_id">Worker ID / RCH ID</label>
+          <input id="login-input-id" type="text" value="ASHA-KN-408" required placeholder="e.g. ASHA-KN-408"
+            class="w-full h-11 px-3.5 rounded-xl border border-surface-container-highest bg-surface-container-low text-[14px] font-semibold text-on-surface focus:border-primary focus:bg-white focus:outline-none mt-1" />
+        </div>
+        <div>
+          <label class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wide block" data-i18n="login_lbl_ward">Ward / PHC Area</label>
+          <input id="login-input-ward" type="text" value="Ward 4 • Shivajinagar" required placeholder="e.g. Ward 4 • Shivajinagar"
+            class="w-full h-11 px-3.5 rounded-xl border border-surface-container-highest bg-surface-container-low text-[14px] font-semibold text-on-surface focus:border-primary focus:bg-white focus:outline-none mt-1" />
+        </div>
+        <button type="submit"
+          class="w-full h-12 rounded-xl bg-primary text-white font-bold text-[14px] shadow-md mt-2 active:scale-95 transition-transform flex items-center justify-center gap-2 hover:bg-primary-container">
+          <span class="material-symbols-outlined text-[18px]">how_to_reg</span>
+          <span data-i18n="login_btn_submit">Sign In &amp; Set Active Worker</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Client-side Scripts -->
+  <script src="/api.js"></script>
+  <script src="/app.js"></script>
+  <script src="/ui.js"></script>
+</body>
+
+</html>

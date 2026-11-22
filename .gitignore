@@ -15,6 +15,7 @@
 *.ogg
 *.webm
 logs/
+*.log
 
 # Python
 __pycache__/
