@@ -48,18 +48,26 @@ app.add_middleware(
 app.include_router(records.router)
 app.include_router(ws.router)
 
-# ── Health Check ──────────────────────────────────────────────────────────
+# ── Health & Service Info ──────────────────────────────────────────────────
+
+@app.get("/health")
+async def health():
+    """Simple health check endpoint."""
+    return {
+        "status": "ok",
+        "service": "SwasthyaVaani",
+        "environment": settings.app_env,
+    }
 
 
-@app.get("/")
-async def root():
-    """Root endpoint with service overview and links."""
+@app.get("/api/info")
+async def info():
+    """Service overview and links."""
     return {
         "service": "SwasthyaVaani — Voice Field Register for ASHA Workers",
         "version": "0.1.0",
         "status": "online",
         "docs_url": "/docs",
-        "live_mic_tester": "/demo",
         "health_check": "/health",
         "endpoints": {
             "websocket_voice": "/ws/voice?lang=hi-IN",
@@ -71,11 +79,17 @@ async def root():
     }
 
 
-@app.get("/health")
-async def health():
-    """Simple health check endpoint."""
-    return {
-        "status": "ok",
-        "service": "SwasthyaVaani",
-        "environment": settings.app_env,
-    }
+# ── Mount Static Folders (Frontend PWA & Debug Scripts) ────────────────────
+
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+SCRIPTS_DIR = BASE_DIR / "scripts"
+FRONTEND_STATIC = BASE_DIR / "frontend" / "static"
+
+if SCRIPTS_DIR.exists():
+    app.mount("/scripts", StaticFiles(directory=str(SCRIPTS_DIR), html=True), name="scripts")
+
+if FRONTEND_STATIC.exists():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_STATIC), html=True), name="frontend")

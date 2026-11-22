@@ -6,7 +6,9 @@
  */
 
 // ── SINGLE BASE URL CONFIGURATION ──────────────────────────────────────────
-const BACKEND_BASE_URL = (typeof window !== 'undefined' && window.__SW_BACKEND_URL__) || 'http://localhost:8000';
+const BACKEND_BASE_URL = (typeof window !== 'undefined' && window.__SW_BACKEND_URL__)
+  || (typeof window !== 'undefined' && window.location.origin)
+  || 'http://localhost:8000';
 // ───────────────────────────────────────────────────────────────────────────
 
 (function (root, factory) {
