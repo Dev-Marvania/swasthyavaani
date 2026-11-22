@@ -1023,6 +1023,8 @@
       label_ward_area: 'Assigned Ward / Village',
       btn_cancel: 'Cancel',
       btn_save_profile: 'Save & Login',
+      btn_logout: 'Log Out',
+      drawer_logout_btn: 'Log Out',
       new_record_btn: 'New Record',
       modal_title: 'Tap to Speak',
       modal_subtitle: 'Speak naturally in your mother tongue or Hindi-English mix.',
@@ -1076,6 +1078,8 @@
       label_ward_area: 'वार्ड / गाँव',
       btn_cancel: 'रद्द करें',
       btn_save_profile: 'सहेजें और लॉगिन करें',
+      btn_logout: 'लॉग आउट',
+      drawer_logout_btn: 'लॉग आउट',
       new_record_btn: 'नया रिकॉर्ड',
       modal_title: 'बोलने के लिए टैप करें',
       modal_subtitle: 'अपनी मातृभाषा या हिन्दी-अंग्रेजी मिक्स में सहजता से बोलें।',
@@ -1129,6 +1133,8 @@
       label_ward_area: 'ನಿಗದಿಪಡಿಸಿದ ವಾರ್ಡ್ / ಗ್ರಾಮ',
       btn_cancel: 'ರದ್ದುಮಾಡಿ',
       btn_save_profile: 'ಉಳಿಸಿ ಮತ್ತು ಲಾಗಿನ್ ಮಾಡಿ',
+      btn_logout: 'ಲಾಗ್ ಔಟ್',
+      drawer_logout_btn: 'ಲಾಗ್ ಔಟ್',
       new_record_btn: 'ಹೊಸ ದಾಖಲೆ',
       modal_title: 'ಮಾತನಾಡಲು ಟ್ಯಾಪ್ ಮಾಡಿ',
       modal_subtitle: 'ನಿಮ್ಮ ಮಾತೃಭಾಷೆ ಅಥವಾ ಕನ್ನಡದಲ್ಲಿ ಮುಕ್ತವಾಗಿ ಮಾತನಾಡಿ.',
@@ -1182,6 +1188,8 @@
       label_ward_area: 'வார்டு / கிராமம்',
       btn_cancel: 'ரத்து செய்',
       btn_save_profile: 'சேமித்து உள்நுழையவும்',
+      btn_logout: 'வெளியேறு',
+      drawer_logout_btn: 'வெளியேறு',
       new_record_btn: 'புதிய பதிவு',
       modal_title: 'பேச தட்டவும்',
       modal_subtitle: 'உங்கள் தாய்மொழியில் அல்லது தமிழில் இயல்பாக பேசுங்கள்.',
@@ -1235,6 +1243,8 @@
       label_ward_area: 'వార్డు / గ్రామం',
       btn_cancel: 'రద్దు చేయి',
       btn_save_profile: 'సేవ్ చేసి లాగిన్ చేయండి',
+      btn_logout: 'లాగ్ అవుట్',
+      drawer_logout_btn: 'లాగ్ అవుట్',
       new_record_btn: 'కొత్త రికార్డు',
       modal_title: 'మాట్లాడటానికి నొక్కండి',
       modal_subtitle: 'మీ మాతృభాషలో సహజంగా మాట్లాడండి.',
@@ -1288,6 +1298,8 @@
       label_ward_area: 'नेमून दिलेला वॉर्ड / गाव',
       btn_cancel: 'रद्द करा',
       btn_save_profile: 'जतन करा आणि लॉगिन करा',
+      btn_logout: 'लॉग आउट',
+      drawer_logout_btn: 'लॉग आउट',
       new_record_btn: 'नवीन नोंद',
       modal_title: 'बोलण्यासाठी टॅप करा',
       modal_subtitle: 'मराठी किंवा तुमच्या भाषेत सहज बोला.',
@@ -1453,22 +1465,44 @@
     }
   }
 
-  // --- ASHA Worker Login Controller ---
+  // --- ASHA Worker Login & Session Controller ---
+  function getActiveWorkerProfile() {
+    let profile = { name: 'ASHA Kavita', id: 'ASHA-KN-408', ward: 'Ward 4 • Shivajinagar', loggedIn: true };
+    try {
+      const stored = localStorage.getItem('swasthyavaani_worker_profile');
+      if (stored) {
+        profile = JSON.parse(stored);
+      }
+    } catch (e) {}
+    return profile;
+  }
+
+  function showToast(title, subtitle) {
+    const toast = document.getElementById('sync-success-toast');
+    if (toast) {
+      const titleEl = document.getElementById('toast-title');
+      const subEl = document.getElementById('toast-subtitle');
+      if (titleEl) titleEl.textContent = title;
+      if (subEl) subEl.textContent = subtitle;
+      toast.classList.remove('hidden');
+      setTimeout(() => toast.classList.add('hidden'), 3000);
+    }
+  }
+
   window.openLoginModal = () => {
     const modal = document.getElementById('asha-login-modal');
     if (!modal) return;
-    let profile = { name: 'Kavita', id: 'ASHA-KN-408', ward: 'Ward 4' };
-    try {
-      const stored = localStorage.getItem('swasthyavaani_worker_profile');
-      if (stored) profile = JSON.parse(stored);
-    } catch (e) {}
+    const profile = getActiveWorkerProfile();
     const nameInp = document.getElementById('login-worker-name');
     const idInp = document.getElementById('login-worker-id');
-    const wardInp = document.getElementById('login-ward-area');
-    if (nameInp) nameInp.value = profile.name || '';
-    if (idInp) idInp.value = profile.id || '';
-    if (wardInp) wardInp.value = profile.ward || '';
+    const wardInp = document.getElementById('login-worker-ward');
 
+    if (nameInp) nameInp.value = (profile.loggedIn !== false && profile.name !== 'Guest Worker') ? profile.name : '';
+    if (idInp) idInp.value = (profile.loggedIn !== false && profile.id !== 'UNASSIGNED') ? profile.id : '';
+    if (wardInp) wardInp.value = (profile.loggedIn !== false && profile.ward !== 'General Ward') ? profile.ward : '';
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
     modal.classList.remove('pointer-events-none', 'opacity-0', 'invisible');
     modal.classList.add('opacity-100');
     document.documentElement.classList.add('modal-scroll-lock');
@@ -1477,8 +1511,8 @@
   window.closeLoginModal = () => {
     const modal = document.getElementById('asha-login-modal');
     if (!modal) return;
-    modal.classList.remove('opacity-100');
-    modal.classList.add('opacity-0', 'pointer-events-none', 'invisible');
+    modal.classList.remove('opacity-100', 'flex');
+    modal.classList.add('opacity-0', 'pointer-events-none', 'invisible', 'hidden');
     document.documentElement.classList.remove('modal-scroll-lock');
   };
 
@@ -1486,38 +1520,70 @@
     if (e && e.preventDefault) e.preventDefault();
     const nameInp = document.getElementById('login-worker-name');
     const idInp = document.getElementById('login-worker-id');
-    const wardInp = document.getElementById('login-ward-area');
+    const wardInp = document.getElementById('login-worker-ward');
 
-    const name = (nameInp && nameInp.value.trim()) || 'Kavita';
+    const name = (nameInp && nameInp.value.trim()) || 'ASHA Kavita';
     const id = (idInp && idInp.value.trim()) || 'ASHA-KN-408';
-    const ward = (wardInp && wardInp.value.trim()) || 'Ward 4';
+    const ward = (wardInp && wardInp.value.trim()) || 'Ward 4 • Shivajinagar';
 
-    const profile = { name, id, ward };
+    const profile = { name, id, ward, loggedIn: true };
     localStorage.setItem('swasthyavaani_worker_profile', JSON.stringify(profile));
 
     applyWorkerProfile(profile);
     window.closeLoginModal();
+    showToast('Profile Updated', `Logged in as ${name} (${id})`);
+  };
 
-    // Show toast
-    const toast = document.getElementById('sync-success-toast');
-    if (toast) {
-      const title = document.getElementById('toast-title');
-      const sub = document.getElementById('toast-subtitle');
-      if (title) title.textContent = 'Profile Updated';
-      if (sub) sub.textContent = `Logged in as ${name} (${id})`;
-      toast.classList.remove('hidden');
-      setTimeout(() => toast.classList.add('hidden'), 2500);
+  window.handleAshaLogout = () => {
+    localStorage.removeItem('swasthyavaani_worker_profile');
+    const guestProfile = { name: 'Guest Worker', id: 'UNASSIGNED', ward: 'General Ward', loggedIn: false };
+    applyWorkerProfile(guestProfile);
+
+    window.closeLoginModal();
+    if (typeof window.toggleNavMenu === 'function') {
+      window.toggleNavMenu(false);
     }
+    showToast('Logged Out', 'Switched to guest mode. Enter credentials to sign in.');
   };
 
   function applyWorkerProfile(profile) {
+    const isLogged = profile && profile.loggedIn !== false;
     const greetingEl = document.getElementById('asha-header-greeting');
     const subtextEl = document.getElementById('drawer-login-subtext');
+    const drawerName = document.getElementById('drawer-profile-name');
+    const drawerArea = document.getElementById('drawer-profile-area');
+    const drawerLogoutBtn = document.getElementById('drawer-logout-btn');
+    const modalLogoutBtn = document.getElementById('modal-logout-btn');
+
     if (greetingEl) {
-      greetingEl.textContent = `ASHA ${profile.name} • ${profile.ward}`;
+      greetingEl.textContent = isLogged ? `ASHA ${profile.name} • ${profile.ward}` : `ASHA Field Register • Guest`;
     }
     if (subtextEl) {
-      subtextEl.textContent = `${profile.name} (${profile.id}) • Switch`;
+      subtextEl.textContent = isLogged ? `${profile.name} (${profile.id}) • Switch` : `Not signed in • Tap to sign in`;
+    }
+    if (drawerName) {
+      drawerName.textContent = isLogged ? `ASHA ${profile.name}` : `Guest Worker`;
+    }
+    if (drawerArea) {
+      drawerArea.textContent = isLogged ? `${profile.ward}` : `Tap login to set ward`;
+    }
+    if (drawerLogoutBtn) {
+      if (isLogged) {
+        drawerLogoutBtn.classList.remove('hidden');
+        drawerLogoutBtn.style.display = 'flex';
+      } else {
+        drawerLogoutBtn.classList.add('hidden');
+        drawerLogoutBtn.style.display = 'none';
+      }
+    }
+    if (modalLogoutBtn) {
+      if (isLogged) {
+        modalLogoutBtn.classList.remove('hidden');
+        modalLogoutBtn.style.display = 'flex';
+      } else {
+        modalLogoutBtn.classList.add('hidden');
+        modalLogoutBtn.style.display = 'none';
+      }
     }
   }
 
@@ -1538,16 +1604,12 @@
     applyTranslations(currentUILanguage);
 
     // 0b. Restore ASHA Worker Profile
-    let profile = { name: 'Kavita', id: 'ASHA-KN-408', ward: 'Ward 4' };
-    try {
-      const stored = localStorage.getItem('swasthyavaani_worker_profile');
-      if (stored) profile = JSON.parse(stored);
-    } catch (e) {}
+    const profile = getActiveWorkerProfile();
     applyWorkerProfile(profile);
 
     const loginForm = document.getElementById('asha-login-form');
     if (loginForm) {
-      loginForm.addEventListener('submit', window.handleAshaLogin);
+      loginForm.onsubmit = window.handleAshaLogin;
     }
 
     // Close header language menu when clicking outside
